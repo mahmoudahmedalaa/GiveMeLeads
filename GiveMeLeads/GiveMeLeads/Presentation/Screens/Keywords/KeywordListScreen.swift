@@ -102,19 +102,19 @@ struct KeywordListScreen: View {
 struct FlowLayout: Layout {
     var spacing: CGFloat
     
-    func sizeThatFits(proposal: ProposableSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let result = arrange(proposal: proposal, subviews: subviews)
         return result.size
     }
     
-    func placeSubviews(in bounds: CGRect, proposal: ProposableSize, subviews: Subviews, cache: inout ()) {
-        let result = arrange(proposal: ProposableSize(width: bounds.width, height: bounds.height), subviews: subviews)
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let result = arrange(proposal: ProposedViewSize(width: bounds.width, height: bounds.height), subviews: subviews)
         for (index, position) in result.positions.enumerated() {
             subviews[index].place(at: CGPoint(x: bounds.minX + position.x, y: bounds.minY + position.y), proposal: .unspecified)
         }
     }
     
-    private func arrange(proposal: ProposableSize, subviews: Subviews) -> (size: CGSize, positions: [CGPoint]) {
+    private func arrange(proposal: ProposedViewSize, subviews: Subviews) -> (size: CGSize, positions: [CGPoint]) {
         var positions: [CGPoint] = []
         var x: CGFloat = 0
         var y: CGFloat = 0

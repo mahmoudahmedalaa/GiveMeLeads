@@ -15,6 +15,7 @@ enum AppConfig {
     
     // App
     static let appName = "GiveMeLeads"
+    static let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0"
     static let maxProfiles = 3
     static let maxKeywordsPerProfile = 10
     static let defaultScoreThreshold = 80

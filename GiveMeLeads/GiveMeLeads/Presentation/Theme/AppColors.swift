@@ -73,6 +73,12 @@ enum AppColors {
         startPoint: .top,
         endPoint: .bottom
     )
+    
+    static let premiumGradient = LinearGradient(
+        colors: [Color(hex: "#F59E0B"), Color(hex: "#EF4444")],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
 }
 
 // MARK: - Color Hex Extension
