@@ -27,14 +27,22 @@
 
 | Field | Value |
 |:------|:------|
-| **App Name** | [Your App] |
-| **Version** | [Current version] |
-| **Platform** | [iOS / Android / Web] |
-| **Status** | [Planning / Active Development / Launched] |
+| **App Name** | GiveMeLeads |
+| **Version** | 0.1.0 (MVP) |
+| **Platform** | iOS (Swift / SwiftUI) |
+| **Status** | Planning |
+| **Architecture** | MVVM + Clean Architecture |
+| **Backend** | Supabase (PostgreSQL + Edge Functions + Auth) |
+| **AI** | Free models (on-device CoreML or free API tier) |
+| **Target** | iOS 17+ |
 
 ---
 
 ## Operating Principles
+
+> ⚠️ **MANDATORY**: Read `02-agent/skills/DEVELOPMENT_PRINCIPLES.md` before starting ANY work.
+> It contains 7 non-negotiable principles from the project owner covering: free-only services,
+> extensive testing, clean code, git discipline, beautiful UI, package usage, and approval requirements.
 
 ### 1. Plan Before You Code
 - Read relevant docs from `01-docs/` before implementing
@@ -69,7 +77,7 @@
 
 ### ⚠️ Summarize Then Act
 - Refactoring that changes multiple files
-- Adding new dependencies
+- Adding new Swift packages
 - Modifying database schema
 - Changing authentication logic
 
@@ -86,30 +94,57 @@
 ## File Organization
 
 ```
-project-root/
-├── 01-docs/               # Source of truth for all decisions
-├── 02-agent/               # AI agent rules and skills
-│   ├── AGENTS.md           # This file
-│   ├── rules/              # Constraints and standards
-│   └── skills/             # Reusable procedures
-├── 03-workflows/           # Dev, test, deploy procedures
-├── 04-prompting/           # Prompting guide and templates
-├── 05-checklists/          # Launch and post-launch checklists
-└── src/                    # Application source code
-    ├── domain/             # Business logic (entities, use cases)
-    ├── data/               # Data access (repositories, APIs)
-    ├── presentation/       # UI (screens, components)
-    └── infrastructure/     # Framework glue (auth, storage, config)
+GiveMeLeads/
+├── 00-research/          # Market research & competitor analysis
+├── 01-docs/              # Source of truth for all decisions
+├── 02-agent/             # AI agent rules and skills
+│   ├── AGENTS.md         # This file
+│   ├── rules/            # Constraints and standards
+│   └── skills/           # Reusable procedures
+├── 03-workflows/         # Dev, test, deploy procedures
+├── 04-prompting/         # Prompting guide and templates
+├── 05-checklists/        # Launch and post-launch checklists
+└── GiveMeLeads/          # Xcode project root
+    ├── App/              # App entry point, configuration
+    ├── Core/             # Shared utilities, extensions, constants
+    ├── Domain/           # Business logic layer
+    │   ├── Entities/     # Data models
+    │   ├── UseCases/     # Business rules
+    │   └── Repositories/ # Protocol definitions
+    ├── Data/             # Data access layer
+    │   ├── Repositories/ # Repository implementations
+    │   ├── DataSources/  # API + local data sources
+    │   └── Models/       # DTO / API response models
+    ├── Presentation/     # UI layer (SwiftUI)
+    │   ├── Screens/      # Full-screen views
+    │   ├── Components/   # Reusable UI components
+    │   ├── ViewModels/   # MVVM view models
+    │   └── Theme/        # Design system (colors, fonts, spacing)
+    └── Infrastructure/   # Framework glue (Supabase, Notifications)
 ```
 
 ---
 
 ## Current Roadmap
 
-### [Version X.Y] — [Codename / Theme]
+### v0.1.0 — "MVP / GummySearch Replacement"
 | Feature | Status | Priority |
 |:--------|:-------|:---------|
-| | ⬜ Not Started / 🔄 In Progress / ✅ Done | P0/P1/P2 |
+| Keyword Tracking | ⬜ Not Started | P0 |
+| Lead Discovery Feed | ⬜ Not Started | P0 |
+| AI Lead Scoring | ⬜ Not Started | P0 |
+| Lead Detail & Engagement | ⬜ Not Started | P0 |
+| Auth & Trial | ⬜ Not Started | P0 |
+| Push Notifications | ⬜ Not Started | P0 |
+
+### v1.1 — "Insights"
+| Feature | Status | Priority |
+|:--------|:-------|:---------|
+| Analytics Dashboard | ⬜ Not Started | P1 |
+| Saved Leads Collection | ⬜ Not Started | P1 |
+| Custom AI Instructions | ⬜ Not Started | P1 |
+| Subreddit Recommendations | ⬜ Not Started | P1 |
+| Lead Export (CSV) | ⬜ Not Started | P1 |
 
 ---
 

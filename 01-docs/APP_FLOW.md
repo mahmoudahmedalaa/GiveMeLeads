@@ -4,63 +4,291 @@
 
 ## 1. Navigation Structure
 
-### App Architecture
-<!-- Choose one: Tab-based / Stack / Drawer / Hybrid -->
+### App Architecture: Tab-based + Modal
 
 ```
 App Root
-├── [Tab/Section 1] — [Purpose]
-│   ├── Screen 1.1 — [Name]
-│   └── Screen 1.2 — [Name]
-├── [Tab/Section 2] — [Purpose]
-│   ├── Screen 2.1 — [Name]
-│   └── Screen 2.2 — [Name]
-├── [Modal Screens]
-│   └── Screen M.1 — [Name]
-└── [Auth Screens]
-    ├── Login
-    ├── Register
-    └── Forgot Password
+├── 🔐 Auth Stack (unauthenticated)
+│   ├── WelcomeScreen
+│   ├── OnboardingScreen (3 slides)
+│   ├── LoginScreen
+│   └── SignUpScreen
+│
+├── 🏠 Main Tab Bar (authenticated)
+│   ├── Tab 1: Leads — Lead Discovery Feed
+│   │   ├── LeadFeedScreen
+│   │   └── LeadDetailScreen (push)
+│   │
+│   ├── Tab 2: Keywords — Keyword Management
+│   │   ├── KeywordListScreen
+│   │   ├── AddKeywordScreen (sheet)
+│   │   └── EditKeywordScreen (sheet)
+│   │
+│   ├── Tab 3: Saved — Saved Leads
+│   │   ├── SavedLeadsScreen
+│   │   └── LeadDetailScreen (push)
+│   │
+│   └── Tab 4: Settings — Account & Preferences
+│       ├── SettingsScreen
+│       ├── ProfileScreen (push)
+│       ├── NotificationSettingsScreen (push)
+│       ├── SubscriptionScreen (push)
+│       └── AboutScreen (push)
+│
+└── 🚫 Paywall (modal)
+    └── PaywallScreen (fullScreenCover)
 ```
 
 ---
 
 ## 2. Screen Specifications
 
-### Screen: [Name]
-
-**Route**: `/path/to/screen`  
-**Access**: Public / Authenticated / Premium  
-**Purpose**: [One sentence]
+### Screen: Welcome
+**Route**: First launch only  
+**Access**: Public  
+**Purpose**: Brand impression and onboarding entry
 
 #### Layout
 ```
 ┌─────────────────────────────┐
-│         Header / Nav        │
-├─────────────────────────────┤
 │                             │
-│       [Main Content]        │
+│      [App Logo + Name]      │
+│      "GiveMeLeads"         │
 │                             │
+│    [Animated illustration]  │
+│    "Find leads that want    │
+│     what you offer"         │
+│                             │
+│    ┌─────────────────────┐  │
+│    │   Get Started →      │  │
+│    └─────────────────────┘  │
+│                             │
+│    Already have account?    │
+│          Sign In            │
+└─────────────────────────────┘
+```
+
+#### Navigation
+- **Entry**: App first launch
+- **Exit**: "Get Started" → Onboarding, "Sign In" → LoginScreen
+
+---
+
+### Screen: Onboarding (3 slides)
+**Route**: After Welcome  
+**Access**: Public  
+**Purpose**: Explain value proposition
+
+#### Slides
+```
+Slide 1: "🎯 Discover"
+"AI monitors Reddit 24/7 for people
+ looking for what you offer"
+[Illustration: radar scanning]
+
+Slide 2: "📊 Score"
+"Every lead gets an AI intent score
+ so you focus on the best ones"
+[Illustration: lead cards with scores]
+
+Slide 3: "💬 Engage"
+"Get smart reply suggestions and
+ respond at the perfect moment"
+[Illustration: chat bubbles]
+```
+
+#### Elements
+| Element | Type | Behavior |
+|:--------|:-----|:---------|
+| Page indicator | Dots | Shows current slide |
+| Next button | Button | Advances to next slide |
+| Skip button | Text button | Jumps to Sign Up |
+| Continue button | Primary button | On slide 3, goes to Sign Up |
+
+---
+
+### Screen: Lead Feed
+**Route**: Tab 1 (default)  
+**Access**: Authenticated  
+**Purpose**: Browse and triage Reddit leads
+
+#### Layout
+```
+┌─────────────────────────────┐
+│  GiveMeLeads     🔍 Filter  │
 ├─────────────────────────────┤
-│       [Actions / CTA]       │
+│ ┌─────────────────────────┐ │
+│ │ 🟢 92  r/SaaS  · 2h ago │ │
+│ │                         │ │
+│ │ "Looking for a project  │ │
+│ │  management tool that..." │ │
+│ │                         │ │
+│ │  u/techguy42  ↑ 47  💬12│ │
+│ └─────────────────────────┘ │
+│                             │
+│ ┌─────────────────────────┐ │
+│ │ 🟡 67  r/startup  · 5h  │ │
+│ │                         │ │
+│ │ "Can anyone recommend   │ │
+│ │  a CRM for small..."    │ │
+│ │                         │ │
+│ │  u/founder99  ↑ 23  💬8 │ │
+│ └─────────────────────────┘ │
+│                             │
+│         [More cards...]     │
+├─────────────────────────────┤
+│  🏠 Leads  🔑 Keywords     │
+│  📌 Saved  ⚙️ Settings     │
 └─────────────────────────────┘
 ```
 
 #### Elements
 | Element | Type | Behavior |
 |:--------|:-----|:---------|
-| | Button / Input / List / etc. | What happens on interaction |
+| Lead card | Swipeable card | Tap → detail; swipe R → save; swipe L → dismiss |
+| Score badge | Colored badge | Green ≥80, Yellow 50-79, Gray <50 |
+| Filter button | Icon button | Opens filter sheet |
+| Pull-to-refresh | Gesture | Fetches latest leads |
 
 #### States
-- **Loading**: [What shows while data loads]
-- **Empty**: [What shows with no data]
-- **Error**: [What shows on failure]
-- **Success**: [Confirmation behavior]
+- **Loading**: Skeleton cards (3-4 placeholders)
+- **Empty**: Illustration + "No leads yet. Set up keywords to start!" with CTA
+- **Error**: "Couldn't load leads. Pull to retry." + retry button
+- **Success**: Scrollable list of lead cards
 
-#### Navigation
-- **Entry**: How users arrive at this screen
-- **Exit**: Where users go from here
-- **Back**: Behavior of back button/gesture
+---
+
+### Screen: Lead Detail
+**Route**: Push from LeadFeedScreen or SavedLeadsScreen  
+**Access**: Authenticated  
+**Purpose**: Full lead context + AI engagement
+
+#### Layout
+```
+┌─────────────────────────────┐
+│  ← Back         ⋯ Actions   │
+├─────────────────────────────┤
+│                             │
+│  ┌───────────────────────┐  │
+│  │ 🟢 Score: 92/100      │  │
+│  │ Intent · Urgency · Fit│  │
+│  └───────────────────────┘  │
+│                             │
+│  r/SaaS · 2 hours ago      │
+│  u/techguy42 · ↑47 · 💬12  │
+│                             │
+│  "Looking for a project     │
+│   management tool that      │
+│   handles dependencies and  │
+│   has a good mobile app.    │
+│   Currently using Asana but │
+│   it's too expensive..."    │
+│                             │
+│  ─────────────────────────  │
+│                             │
+│  💡 AI Reply Suggestions    │
+│                             │
+│  ┌───────────────────────┐  │
+│  │ 🎯 Professional         │  │
+│  │ "You might want to     │  │
+│  │  check out [Product]..." │  │
+│  │          [Copy] 📋     │  │
+│  └───────────────────────┘  │
+│                             │
+│  ┌───────────────────────┐  │
+│  │ 💬 Casual              │  │
+│  │ "Hey! I use [Product]  │  │
+│  │  for exactly this..."  │  │
+│  │          [Copy] 📋     │  │
+│  └───────────────────────┘  │
+│                             │
+├─────────────────────────────┤
+│ [📌 Save] [🔗 Open Reddit] │
+│ [✅ Mark Contacted] [❌ Dismiss]│
+└─────────────────────────────┘
+```
+
+#### States
+- **Loading**: Skeleton layout
+- **Error**: "Post no longer available" message
+- **AI loading**: Shimmer effect on reply suggestion cards
+
+---
+
+### Screen: Keyword Management
+**Route**: Tab 2  
+**Access**: Authenticated  
+**Purpose**: Configure tracking keywords and subreddits
+
+#### Layout
+```
+┌─────────────────────────────┐
+│  Keywords           ＋ Add   │
+├─────────────────────────────┤
+│                             │
+│  Profile: "My SaaS" 🟢 ON  │
+│  ┌───────────────────────┐  │
+│  │ project management    ✕│  │
+│  │ task app recommend    ✕│  │
+│  │ Asana alternative     ✕│  │
+│  └───────────────────────┘  │
+│  Subreddits: r/SaaS,       │
+│  r/productivity, r/startup  │
+│                             │
+│  ─────────────────────────  │
+│                             │
+│  Profile: "Freelance" 🔴 OFF │
+│  ┌───────────────────────┐  │
+│  │ looking for developer ✕│  │
+│  │ need a freelancer     ✕│  │
+│  └───────────────────────┘  │
+│  Subreddits: r/forhire,    │
+│  r/freelance                │
+│                             │
+├─────────────────────────────┤
+│  3/10 keywords · 2/3 profiles│
+└─────────────────────────────┘
+```
+
+---
+
+### Screen: Settings
+**Route**: Tab 4  
+**Access**: Authenticated  
+**Purpose**: Account management and preferences
+
+#### Layout
+```
+┌─────────────────────────────┐
+│  Settings                   │
+├─────────────────────────────┤
+│                             │
+│  ACCOUNT                    │
+│  ┌───────────────────────┐  │
+│  │ 👤 Profile          → │  │
+│  │ 💳 Subscription     → │  │
+│  └───────────────────────┘  │
+│                             │
+│  PREFERENCES                │
+│  ┌───────────────────────┐  │
+│  │ 🔔 Notifications    → │  │
+│  │ 🎯 Min. Score: 70  ─○ │  │
+│  │ 🌙 Dark Mode   [ON]  │  │
+│  └───────────────────────┘  │
+│                             │
+│  ABOUT                      │
+│  ┌───────────────────────┐  │
+│  │ ℹ️  About GiveMeLeads → │  │
+│  │ 📜 Privacy Policy    → │  │
+│  │ 📧 Contact Support   → │  │
+│  │ ⭐ Rate on App Store → │  │
+│  └───────────────────────┘  │
+│                             │
+│  [Sign Out]                 │
+│                             │
+│  Trial: 5 days remaining    │
+└─────────────────────────────┘
+```
 
 ---
 
@@ -73,53 +301,77 @@ App Launch
     │
     ├─ First launch? ─── YES ──→ Welcome Screen
     │                                  │
-    │                            Onboarding (3-5 steps)
+    │                            Onboarding (3 slides)
     │                                  │
-    │                            Auth Screen
-    │                             ├── Sign Up
-    │                             ├── Social Login
-    │                             └── Skip (if allowed)
+    │                            Sign Up Screen
+    │                             ├── Sign in with Apple
+    │                             └── Email + Password
     │                                  │
-    │                             Home Screen
+    │                            Keyword Setup (guided)
+    │                             ├── "What do you offer?"
+    │                             ├── Add 2-5 keywords
+    │                             └── Select subreddits
+    │                                  │
+    │                            Lead Feed (first results)
+    │                                  │
+    │                            ✅ Setup Complete
     │
-    └─ Returning user ──→ Home Screen
+    └─ Returning user ──→ Lead Feed (Tab 1)
 ```
 
-### Flow 2: Core Feature Flow
+### Flow 2: Core Feature Flow (Lead Discovery → Engagement)
 ```
-[Map your primary use case here]
+Lead Feed
+    │
+    ├── See scored lead card
+    │   ├── Swipe RIGHT ──→ Save to "Saved" tab
+    │   ├── Swipe LEFT  ──→ Dismiss (hidden from feed)
+    │   └── TAP         ──→ Lead Detail Screen
+    │                           │
+    │                     ├── Read full post
+    │                     ├── View AI reply suggestions
+    │                     ├── Copy reply → Open Reddit
+    │                     ├── Mark as Contacted
+    │                     └── Back to Feed
+    │
+    └── Pull to refresh ──→ Fetch new leads
 ```
 
 ### Flow 3: Authentication Flow
 ```
 Login Screen
     │
-    ├── Email/Password
-    │   ├── Valid ──→ Home
-    │   ├── Wrong password ──→ Error message
-    │   └── Unverified ──→ "Check email" message
-    │
-    ├── Social Login (Google/Apple)
-    │   ├── Success ──→ Home
+    ├── Sign in with Apple
+    │   ├── Success ──→ Lead Feed
     │   └── Cancelled ──→ Stay on Login
     │
+    ├── Email/Password
+    │   ├── Valid ──→ Lead Feed
+    │   ├── Wrong password ──→ Shake + error message
+    │   └── No account ──→ "Sign up instead?" link
+    │
     └── Forgot Password
-        ├── Send reset email ──→ Confirmation
+        ├── Send reset email ──→ "Check your inbox" confirmation
         └── Error ──→ "Email not found"
 ```
 
-### Flow 4: Settings & Account
+### Flow 4: Subscription Flow
 ```
-Settings Screen
-    ├── Profile / Account
-    │   ├── Edit Profile
-    │   ├── Change Password
-    │   └── Delete Account (with confirmation!)
-    ├── Preferences
-    │   ├── Theme (Light/Dark)
-    │   ├── Notifications
-    │   └── Language
-    └── Sign Out (with confirmation)
+Trial Expires
+    │
+    ├── Open app ──→ Paywall (fullScreenCover)
+    │                  │
+    │                  ├── Subscribe ($19/mo) ──→ Apple IAP
+    │                  │   ├── Success ──→ Lead Feed (full access)
+    │                  │   └── Failed  ──→ Error + Retry
+    │                  │
+    │                  └── Not now ──→ Limited mode
+    │                      (can view feed, can't interact)
+    │
+    └── Settings → Subscription → Manage
+        ├── View plan details
+        ├── Restore purchases
+        └── Open Apple subscription management
 ```
 
 ---
@@ -128,18 +380,27 @@ Settings Screen
 
 ### Authentication States
 ```
-ANONYMOUS → REGISTERED → VERIFIED → AUTHENTICATED
-                                         ↕
-                                    SIGNED_OUT
+ANONYMOUS → SIGNING_UP → TRIAL_ACTIVE → TRIAL_EXPIRED → SUBSCRIBED
+                                              ↓
+                                         LIMITED_MODE
+                                              ↕
+                                         SUBSCRIBED
 ```
 
-### Data States (per entity)
+### Lead States
 ```
-LOADING → LOADED → STALE → REFRESHING → LOADED
-              ↓
-           EMPTY
-              ↓
-         ERROR → RETRY → LOADING
+DISCOVERED → NEW → SAVED → CONTACTED → CONVERTED
+                     ↘
+                   DISMISSED
+```
+
+### Data States (per screen)
+```
+IDLE → LOADING → LOADED → STALE → REFRESHING → LOADED
+                    ↓
+                 EMPTY
+                    ↓
+              ERROR → RETRY → LOADING
 ```
 
 ---
@@ -148,50 +409,20 @@ LOADING → LOADED → STALE → REFRESHING → LOADED
 
 | Error Type | User-Facing Message | Action |
 |:-----------|:---------------------|:-------|
-| Network offline | "No internet connection" | Retry button |
-| Auth expired | "Session expired" | Redirect to login |
-| Server error | "Something went wrong" | Retry button |
-| Not found | "Content not available" | Back button |
-| Permission denied | "Upgrade to access" | Upgrade CTA |
+| Network offline | "No internet connection" | Retry button + show cached data |
+| Auth expired | "Session expired" | Auto-refresh token, fallback to login |
+| Reddit API error | "Couldn't fetch latest leads" | Retry button + show cached |
+| AI scoring failed | "Score pending" | Show lead without score |
+| Post deleted | "This post is no longer available" | Back button |
+| Trial expired | "Your free trial has ended" | Upgrade CTA |
+| Purchase failed | "Payment couldn't be processed" | Retry / contact support |
 
 ---
 
-## 6. Deep Linking (if applicable)
+## 6. Deep Linking
 
 | Link Pattern | Target Screen | Parameters |
 |:-------------|:--------------|:-----------|
-| `app://item/:id` | Item Detail | `id` |
-| `app://settings` | Settings | — |
-
----
-
-## AI Generation Prompt
-
-```
-Create a comprehensive Application Flow document for [YOUR APP].
-
-App Type: [Tab-based mobile / Single-page web / Dashboard]
-Main Features: [LIST 3-5 CORE FEATURES]
-Auth Required: [Yes/No/Optional]
-Platform: [iOS / Android / Web]
-
-Generate documentation with:
-
-1. NAVIGATION STRUCTURE: ASCII tree showing all screens and hierarchy
-2. SCREEN SPECIFICATIONS: For each screen, provide:
-   - Route path
-   - Access level (Public/Auth/Premium)
-   - ASCII layout wireframe
-   - Interactive elements table
-   - States (loading, empty, error, success)
-   - Navigation entry/exit points
-3. USER FLOWS: ASCII flowcharts for:
-   - First-time user experience (onboarding → auth → home)
-   - Core feature primary flow
-   - Authentication (login, register, forgot password)
-   - Settings and account management
-4. STATE TRANSITIONS: Diagrams for auth states and data loading states
-5. ERROR HANDLING: Table mapping error types to user messages and actions
-
-Use ASCII art for wireframes and flowcharts. Be specific about what each element does.
-```
+| `givemeleads://lead/:id` | Lead Detail | `leadId` |
+| `givemeleads://keywords` | Keyword Management | — |
+| `givemeleads://subscribe` | Paywall | — |

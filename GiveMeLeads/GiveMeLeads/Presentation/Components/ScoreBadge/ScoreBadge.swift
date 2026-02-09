@@ -1,0 +1,106 @@
+import SwiftUI
+
+/// Circular badge showing lead AI intent score (0-100)
+struct ScoreBadge: View {
+    let score: Int
+    let size: BadgeSize
+    
+    enum BadgeSize {
+        case small  // In card
+        case large  // In detail view
+        
+        var diameter: CGFloat {
+            switch self {
+            case .small: 40
+            case .large: 80
+            }
+        }
+        
+        var font: Font {
+            switch self {
+            case .small: AppTypography.scoreBadge
+            case .large: AppTypography.scoreTitle
+            }
+        }
+        
+        var strokeWidth: CGFloat {
+            switch self {
+            case .small: 2
+            case .large: 4
+            }
+        }
+    }
+    
+    var scoreColor: Color {
+        AppColors.scoreColor(for: score)
+    }
+    
+    var body: some View {
+        ZStack {
+            // Background ring
+            Circle()
+                .stroke(scoreColor.opacity(0.2), lineWidth: size.strokeWidth)
+            
+            // Progress ring
+            Circle()
+                .trim(from: 0, to: CGFloat(score) / 100)
+                .stroke(
+                    scoreColor,
+                    style: StrokeStyle(lineWidth: size.strokeWidth, lineCap: .round)
+                )
+                .rotationEffect(.degrees(-90))
+            
+            // Score number
+            Text("\(score)")
+                .font(size.font)
+                .foregroundColor(scoreColor)
+        }
+        .frame(width: size.diameter, height: size.diameter)
+    }
+}
+
+/// Score breakdown showing intent, urgency, fit
+struct ScoreBreakdownView: View {
+    let breakdown: ScoreBreakdown
+    
+    var body: some View {
+        HStack(spacing: AppSpacing.spacing4) {
+            ScoreChip(label: "Intent", value: breakdown.intent, color: AppColors.scoreHigh)
+            ScoreChip(label: "Urgency", value: breakdown.urgency, color: AppColors.warning)
+            ScoreChip(label: "Fit", value: breakdown.fit, color: AppColors.accentCyan)
+        }
+    }
+}
+
+struct ScoreChip: View {
+    let label: String
+    let value: Int
+    let color: Color
+    
+    var body: some View {
+        HStack(spacing: AppSpacing.spacing1) {
+            Circle()
+                .fill(color)
+                .frame(width: 6, height: 6)
+            Text("\(label): \(value)%")
+                .font(AppTypography.bodySmall)
+                .foregroundColor(AppColors.textSecondary)
+        }
+        .padding(.horizontal, AppSpacing.spacing2)
+        .padding(.vertical, AppSpacing.spacing1)
+        .background(AppColors.bgGlass)
+        .clipShape(Capsule())
+    }
+}
+
+#Preview {
+    VStack(spacing: 24) {
+        ScoreBadge(score: 92, size: .large)
+        ScoreBadge(score: 67, size: .small)
+        ScoreBadge(score: 34, size: .small)
+        ScoreBreakdownView(breakdown: ScoreBreakdown(intent: 95, urgency: 88, fit: 94))
+    }
+    .padding()
+    .background(AppColors.background)
+    .preferredColorScheme(.dark)
+}

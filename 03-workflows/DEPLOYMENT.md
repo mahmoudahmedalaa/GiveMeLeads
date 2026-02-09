@@ -12,31 +12,32 @@
 
 ---
 
-## Mobile App Deployment (EAS / Expo)
+## Mobile App Deployment (Local Xcode)
 
-### Development Build
+> **Always use local Xcode builds.** Never use EAS Build or other paid cloud build services. See `XCODE_GUIDE.md` for full details.
+
+### Quick Test on Your Phone (Debug)
 ```bash
-# Build for testing on physical device
-eas build --profile development --platform ios
-eas build --profile development --platform android
+# Plug iPhone in via USB
+open ios/YourApp.xcworkspace
+# In Xcode: Select your iPhone → Press Cmd+R
 ```
 
-### Staging / Preview Build
+### Production Build (TestFlight / App Store)
 ```bash
-eas build --profile preview --platform ios
+# One command — builds, signs, exports IPA
+./build-ios.sh
 ```
 
-### Production Build
-```bash
-# Build for App Store submission
-eas build --profile production --platform ios
-eas build --profile production --platform android
+### Upload to TestFlight
+```
+Xcode → Window → Organizer → Select archive → Distribute App
+→ App Store Connect → Upload
 ```
 
 ### Submit to App Store
-```bash
-eas submit --platform ios
-eas submit --platform android
+```
+App Store Connect → Your App → Add Build → Submit for Review
 ```
 
 ### Over-the-Air Updates (JS only)
@@ -45,7 +46,7 @@ eas submit --platform android
 eas update --branch production --message "Bug fix: [description]"
 ```
 
-> ⚠️ OTA updates only work for JavaScript changes. Native module additions require a full build.
+> ⚠️ OTA updates only work for JavaScript changes. Native module additions require a full build via `./build-ios.sh`.
 
 ---
 
@@ -78,6 +79,7 @@ Before ANY production deployment:
 - [ ] Production environment variables set
 - [ ] Debug tools stripped (see `PRODUCTION_HARDENING.md`)
 - [ ] Staging tested end-to-end
+- [ ] Build number incremented in `Info.plist`
 - [ ] Git tag created for the version
 
 ---

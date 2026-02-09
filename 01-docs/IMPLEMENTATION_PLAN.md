@@ -6,208 +6,292 @@
 
 | Field | Value |
 |:------|:------|
-| **Project** | [App Name] |
-| **MVP Target** | [Date] |
+| **Project** | GiveMeLeads |
+| **MVP Target** | 4-5 weeks from start |
+| **Platform** | iOS (Swift / SwiftUI) |
 | **Approach** | Documentation-first, iterative, test-after-every-step |
 
 ### Build Rules
 1. Code follows documentation (not the reverse)
 2. Test after every step — don't batch
-3. Deploy to staging after each milestone
+3. Deploy to TestFlight after each milestone
 4. Each step produces a verifiable result
 5. **One task per conversation** — fresh AI context = maximum quality
 
 ---
 
-## Task Decomposition (Fresh Context Strategy)
+## Phase 1: Foundation (Week 1, Days 1-2)
 
-After all documentation is generated (Phases 1-6 below), the AI breaks this plan into a **numbered task list**. Each task is designed to be executed in a **fresh conversation** for maximum AI quality.
+### Step 1.1 — Xcode Project Setup
+**Duration**: 2 hours  
+**Goal**: Running Xcode project with correct structure
 
-### Task Format
-Each task must include:
+- [ ] Create new Xcode project (iOS App, SwiftUI, Swift)
+- [ ] Set up folder structure per `02-agent/AGENTS.md`
+- [ ] Add all SPM dependencies from `TECH_STACK.md`
+- [ ] Configure SwiftLint
+- [ ] Set bundle ID, team, deployment target (iOS 17)
+- [ ] Initialize git and make initial commit
+- [ ] Verify: project builds and runs on Simulator
 
-```
-## Task [N]: [Name]
+### Step 1.2 — Environment & Config
+**Duration**: 1 hour  
+**Goal**: Secrets and config properly managed
 
-### Context (read these files first)
-- 01-docs/PRD.md — Feature [X]
-- 01-docs/APP_FLOW.md — Screen [Y]
-- 01-docs/TECH_STACK.md — Section [Z]
+- [ ] Create `Config.xcconfig` for Supabase URL/key
+- [ ] Create `Secrets.xcconfig` (gitignored) for API keys
+- [ ] Set up `AppConfig.swift` to read config values
+- [ ] Add `.gitignore` for Secrets, build artifacts
+- [ ] Verify: app reads config values correctly
 
-### What to Build
-- [ ] Create [file/component]
-- [ ] Implement [specific functionality]
-- [ ] Connect to [dependency]
+### Step 1.3 — Supabase Setup
+**Duration**: 2 hours  
+**Goal**: Supabase project created with schema applied
 
-### Success Criteria
-- [ ] tsc --noEmit passes
-- [ ] Feature works on device/browser
-- [ ] All states handled (loading, empty, error)
-
-### Kickoff Prompt
-> Read AGENTS.md, then execute this task. Reference the files listed
-> in Context above. Iterate until all Success Criteria pass.
-```
-
-### Why Fresh Contexts?
-- Full AI context window per task → better output quality
-- No accumulated confusion from earlier mistakes
-- Each task has all context it needs → no dependencies on chat history
-- If one task goes wrong, it doesn't pollute the next
-
-### How It Works
-1. AI generates the full task list from this Implementation Plan
-2. User opens a **new conversation** for each task
-3. Pastes the task's kickoff prompt
-4. AI reads the relevant docs and executes
-5. AI iterates until all verification checks pass
-6. User moves to next task in a new conversation
+- [ ] Create Supabase project
+- [ ] Apply database schema from `BACKEND_STRUCTURE.md`
+- [ ] Enable Row Level Security on all tables
+- [ ] Configure Supabase Auth (email + Apple)
+- [ ] Test connection from iOS app
+- [ ] Verify: can query empty tables from app
 
 ---
 
-## Phase 1: Foundation
+## Phase 2: Design System (Week 1, Days 3-4)
 
-### Step 1.1 — Project Setup
-**Duration**: 1 hour  
-**Goal**: Running project with linting configured
+### Step 2.1 — Theme & Design Tokens
+**Duration**: 2 hours  
+**Goal**: All colors, fonts, spacing defined in code
 
-- [ ] Initialize git repository
-- [ ] Initialize project (framework-specific)
-- [ ] Install all dependencies from `TECH_STACK.md` (exact versions)
-- [ ] Configure linter + formatter
-- [ ] Verify: project runs locally, no lint errors
-
-### Step 1.2 — Environment Setup
-**Duration**: 30 min  
-**Goal**: All secrets and configs in place
-
-- [ ] Create `.env` with all vars from `TECH_STACK.md`
-- [ ] Create `.env.example` (no secrets)
-- [ ] Add `.env` to `.gitignore`
-- [ ] Verify: app reads env vars correctly
-
-### Step 1.3 — Database / Backend Setup
-**Duration**: 1 hour  
-**Goal**: Database connected, schema applied
-
-- [ ] Set up database (local or cloud)
-- [ ] Configure connection
-- [ ] Apply initial schema from `BACKEND_STRUCTURE.md`
-- [ ] Verify: tables created, can query
-
----
-
-## Phase 2: Design System
-
-### Step 2.1 — Design Tokens
-**Duration**: 1-2 hours  
-**Goal**: Colors, fonts, spacing configured
-
-- [ ] Apply all tokens from `FRONTEND_GUIDELINES.md`
-- [ ] Test in a sample component
-- [ ] Verify: custom styles work, no console errors
+- [ ] Create `Theme/` folder with `Colors.swift`, `Typography.swift`, `Spacing.swift`
+- [ ] Implement all tokens from `FRONTEND_GUIDELINES.md`
+- [ ] Register Poppins custom font
+- [ ] Create gradient definitions
+- [ ] Verify: preview shows correct colors/fonts
 
 ### Step 2.2 — Core Components
-**Duration**: 3-4 hours  
+**Duration**: 4 hours  
 **Goal**: Reusable component library
 
-For each component from `FRONTEND_GUIDELINES.md`:
-- [ ] Create component file
-- [ ] Implement all variants and states
-- [ ] Add TypeScript types
-- [ ] Verify: all variants render correctly
+- [ ] `PrimaryButton.swift` — gradient, press animation, haptic
+- [ ] `SecondaryButton.swift` — bordered variant
+- [ ] `LeadCardView.swift` — swipeable card with score badge
+- [ ] `ScoreBadge.swift` — colored circle with number
+- [ ] `ChipView.swift` — keyword/subreddit tags
+- [ ] `InputField.swift` — floating label, validation
+- [ ] `LoadingView.swift` — skeleton screens
+- [ ] `EmptyStateView.swift` — illustration + CTA
+- [ ] Verify: all components render correctly in previews
 
 ---
 
-## Phase 3: Authentication
+## Phase 3: Authentication (Week 2, Days 5-6)
 
-### Step 3.1 — Auth Backend
-**Duration**: 2-3 hours  
-**Goal**: Register + Login endpoints working
+### Step 3.1 — Auth Flow
+**Duration**: 3 hours  
+**Goal**: User can sign up and log in
 
-- [ ] Implement registration (per `BACKEND_STRUCTURE.md`)
-- [ ] Implement login with token generation
-- [ ] Implement password hashing
-- [ ] Test with API client (Postman/curl)
-- [ ] Verify: can register, login, receive tokens
+- [ ] Implement `AuthViewModel` with Supabase Auth
+- [ ] Build `WelcomeScreen` (brand, CTA)
+- [ ] Build `OnboardingScreen` (3 animated slides)
+- [ ] Build `LoginScreen` (email/pass + Sign in with Apple)
+- [ ] Build `SignUpScreen`
+- [ ] Handle auth state changes (auto-navigate on login)
+- [ ] Create user row in `users` table on signup
+- [ ] Set trial_ends_at = signup + 7 days
+- [ ] Verify: full signup → login → landing flow works
 
-### Step 3.2 — Auth Frontend
-**Duration**: 2-3 hours  
-**Goal**: Registration and login UI connected
+### Step 3.2 — Session & Navigation
+**Duration**: 2 hours  
+**Goal**: Navigation guards and session management
 
-- [ ] Build registration screen (per `APP_FLOW.md`)
-- [ ] Build login screen
-- [ ] Connect to auth endpoints
-- [ ] Handle validation, loading, error states
-- [ ] Verify: end-to-end auth flow works
-
----
-
-## Phase 4: Core Features
-
-### Step 4.X — [Feature Name]
-**Duration**: [estimate]  
-**Goal**: [one-line description]
-
-- [ ] Backend: Create endpoint(s) per `BACKEND_STRUCTURE.md`
-- [ ] Frontend: Build UI per `APP_FLOW.md` + `FRONTEND_GUIDELINES.md`
-- [ ] Connect frontend to backend
-- [ ] Handle all states (loading, empty, error)
-- [ ] Verify: feature works end-to-end
-
-**Ref**: `PRD.md` Feature [N], `APP_FLOW.md` Screen [X]
-
-<!-- Repeat Step 4.X for each P0 feature -->
+- [ ] Implement `AppRouter` for auth vs main navigation
+- [ ] Set up `TabView` with 4 tabs (Leads, Keywords, Saved, Settings)
+- [ ] Auto-redirect to auth when session expires
+- [ ] Token auto-refresh via Supabase SDK
+- [ ] Verify: closing/reopening app maintains session
 
 ---
 
-## Phase 5: Testing
+## Phase 4: Core Features (Week 2-3)
 
-### Step 5.1 — Unit Tests
-**Duration**: 2-3 hours  
+### Step 4.1 — Keyword Tracking
+**Duration**: 4 hours  
+**Goal**: User can create profiles and add keywords
+
+**Ref**: `PRD.md` Feature 1, `APP_FLOW.md` Keyword Management
+
+- [ ] Create `KeywordViewModel` with CRUD operations
+- [ ] Build `KeywordListScreen` — list profiles + keywords
+- [ ] Build `AddKeywordSheet` — keyword input + validation
+- [ ] Build `AddProfileSheet` — profile name + subreddits
+- [ ] Implement profile toggle (on/off)
+- [ ] Enforce limits (3 profiles, 10 keywords each)
+- [ ] Verify: can create/edit/delete keywords, persists to Supabase
+
+### Step 4.2 — Reddit Integration (Edge Function)
+**Duration**: 4 hours  
+**Goal**: Edge Function fetches Reddit posts for keywords
+
+- [ ] Register Reddit API app (OAuth2)
+- [ ] Build `scan-reddit` Edge Function
+- [ ] Implement Reddit OAuth token flow (app-only auth)
+- [ ] Search Reddit for each keyword
+- [ ] Filter by subreddit if specified
+- [ ] Insert leads into database (skip duplicates)
+- [ ] Set up pg_cron to run every 30 minutes
+- [ ] Verify: leads appear in database after function runs
+
+### Step 4.3 — Lead Scoring (Edge Function)
+**Duration**: 3 hours  
+**Goal**: Every lead gets an AI intent score
+
+**Ref**: `PRD.md` Feature 3, `BACKEND_STRUCTURE.md` score-lead
+
+- [ ] Build `score-lead` Edge Function
+- [ ] Implement heuristic scoring algorithm
+- [ ] Trigger on lead INSERT via database webhook
+- [ ] Store score + breakdown in lead row
+- [ ] Verify: new leads get scored within 30 seconds
+
+### Step 4.4 — Lead Discovery Feed
+**Duration**: 5 hours  
+**Goal**: Swipeable lead feed with scores
+
+**Ref**: `PRD.md` Feature 2, `APP_FLOW.md` Lead Feed
+
+- [ ] Create `LeadFeedViewModel` — fetch, filter, paginate
+- [ ] Build `LeadFeedScreen` — scrollable card list
+- [ ] Implement swipe gestures (right=save, left=dismiss)
+- [ ] Add score-based color coding
+- [ ] Implement pull-to-refresh
+- [ ] Add filter sheet (score threshold, subreddit, keyword)
+- [ ] Handle all states: loading, empty, error
+- [ ] Verify: can browse, swipe, filter leads
+
+### Step 4.5 — Lead Detail & AI Replies
+**Duration**: 4 hours  
+**Goal**: Full lead detail with AI engagement
+
+**Ref**: `PRD.md` Feature 4, `APP_FLOW.md` Lead Detail
+
+- [ ] Build `LeadDetailScreen` — full post, score breakdown
+- [ ] Build `generate-replies` Edge Function
+- [ ] Display AI reply suggestions (3 tones)
+- [ ] Implement copy-to-clipboard
+- [ ] "Open in Reddit" deep link
+- [ ] Quick actions: save, dismiss, mark contacted
+- [ ] Verify: can view detail, get replies, copy, open Reddit
+
+---
+
+## Phase 5: Monetization & Notifications (Week 3-4)
+
+### Step 5.1 — Subscription (RevenueCat)
+**Duration**: 3 hours  
+**Goal**: $19/month subscription with 7-day trial
+
+**Ref**: `PRD.md` Feature 5
+
+- [ ] Set up RevenueCat project
+- [ ] Configure product in App Store Connect ($19/mo)
+- [ ] Build `PaywallScreen` — benefits, pricing, CTA
+- [ ] Implement trial status checking
+- [ ] Show paywall when trial expires
+- [ ] Handle restore purchases
+- [ ] Verify: trial → paywall → purchase flow works in sandbox
+
+### Step 5.2 — Push Notifications
+**Duration**: 3 hours  
+**Goal**: Real-time alerts for high-score leads
+
+**Ref**: `PRD.md` Feature 6
+
+- [ ] Configure APNs in Xcode + Supabase
+- [ ] Register for push notifications on app launch
+- [ ] Send notification from Edge Function when lead scores ≥ threshold
+- [ ] Deep link from notification → lead detail
+- [ ] Implement notification settings (threshold, daily cap)
+- [ ] Build `NotificationSettingsScreen`
+- [ ] Verify: receiving notifications on device for high-score leads
+
+---
+
+## Phase 6: Settings & Polish (Week 4)
+
+### Step 6.1 — Settings & Profile
+**Duration**: 2 hours  
+**Goal**: Account management and preferences
+
+- [ ] Build `SettingsScreen` — all sections from `APP_FLOW.md`
+- [ ] Build `ProfileScreen` — edit product description
+- [ ] Build `SubscriptionScreen` — plan details, manage
+- [ ] Implement sign out with confirmation
+- [ ] Show trial countdown
+- [ ] Verify: all settings screens functional
+
+### Step 6.2 — Saved Leads Tab
+**Duration**: 2 hours  
+**Goal**: Dedicated saved leads collection
+
+- [ ] Build `SavedLeadsScreen` — filtered lead list (status = saved/contacted)
+- [ ] Implement lead status management
+- [ ] Add lead count badges on tab
+- [ ] Verify: saved leads appear, status updates persist
+
+### Step 6.3 — Polish & Animations
+**Duration**: 3 hours  
+**Goal**: Premium feel
+
+- [ ] Add all micro-animations from `FRONTEND_GUIDELINES.md`
+- [ ] Implement haptic feedback
+- [ ] Add skeleton loading screens
+- [ ] Smooth all transitions
+- [ ] Test and fix accessibility (VoiceOver, Dynamic Type)
+- [ ] Verify: app feels polished and smooth
+
+---
+
+## Phase 7: Testing & Deployment (Week 4-5)
+
+### Step 7.1 — Testing
+**Duration**: 3 hours  
 **Goal**: Critical paths covered
 
 | Area | Target Coverage |
 |:-----|:---------------|
-| Auth logic | 90% |
-| Validation | 95% |
-| Core features | 80% |
+| Auth logic | 80% |
+| Keyword validation | 90% |
+| Lead scoring algorithm | 90% |
+| ViewModels | 70% |
 
-- [ ] Set up test framework
-- [ ] Write auth tests
-- [ ] Write validation tests
-- [ ] Write core feature tests
+- [ ] Set up XCTest framework
+- [ ] Write auth flow tests
+- [ ] Write keyword validation tests
+- [ ] Write scoring heuristic tests
+- [ ] Write ViewModel unit tests
 - [ ] Verify: all tests pass
 
-### Step 5.2 — Integration / E2E Tests
-**Duration**: 3-4 hours  
-**Goal**: Full user flows verified
+### Step 7.2 — TestFlight
+**Duration**: 2 hours  
+**Goal**: Beta build on TestFlight
 
-- [ ] Registration → Login → Use Feature → Logout
-- [ ] Error paths (wrong password, network failure)
-- [ ] Verify: all flows pass on device/browser
+- [ ] Configure signing and provisioning
+- [ ] Archive and upload to App Store Connect
+- [ ] Invite 10-20 beta testers
+- [ ] Monitor crash reports
+- [ ] Verify: app installs and runs on real device
 
----
+### Step 7.3 — App Store Submission
+**Duration**: 2 hours  
+**Goal**: Submitted for review
 
-## Phase 6: Deployment
-
-### Step 6.1 — Staging Deploy
-**Duration**: 1-2 hours
-
-- [ ] Configure hosting (per `TECH_STACK.md`)
-- [ ] Set production environment variables
-- [ ] Deploy
-- [ ] Smoke test all features
-- [ ] Verify: fully functional on staging URL/device
-
-### Step 6.2 — Production Launch
-**Duration**: 1-2 hours
-
-- [ ] Complete `05-checklists/MVP_LAUNCH.md`
-- [ ] Complete `05-checklists/APP_STORE.md` (if applicable)
-- [ ] Deploy to production
-- [ ] Monitor error logs for 24 hours
-- [ ] Verify: zero critical errors
+- [ ] Complete `05-checklists/APP_STORE.md`
+- [ ] Prepare screenshots (6.7" and 6.5")
+- [ ] Write App Store description
+- [ ] Set up privacy policy URL
+- [ ] Submit for review
+- [ ] Verify: submission accepted, awaiting review
 
 ---
 
@@ -215,10 +299,11 @@ For each component from `FRONTEND_GUIDELINES.md`:
 
 | Milestone | Target | Deliverables |
 |:----------|:-------|:-------------|
-| **Foundation** | Week 1 | Project running, DB connected, design tokens |
-| **Auth** | Week 2 | Register, login, session management |
-| **Core Features** | Week 3 | All P0 features working |
-| **MVP Launch** | Week 4 | Tested, deployed, monitoring |
+| **Foundation** | Week 1 | Project running, Supabase connected, design system |
+| **Auth** | Week 2 | Signup, login, session, navigation |
+| **Core Features** | Week 3 | Keywords, Reddit integration, lead feed, detail |
+| **Monetization** | Week 4 | Subscription, notifications, settings |
+| **Launch** | Week 5 | Tested, TestFlight, App Store submission |
 
 ---
 
@@ -226,33 +311,8 @@ For each component from `FRONTEND_GUIDELINES.md`:
 
 | Risk | Impact | Mitigation |
 |:-----|:-------|:-----------|
-| Scope creep | High | Stick to PRD P0 only |
-| Schema changes | High | Follow migration process |
-| Auth bugs | Critical | Test extensively, use proven libraries |
-| Performance | Medium | Implement caching early |
-| Timeline slip | Medium | Build buffer, track daily |
-
----
-
-## AI Generation Prompt
-
-```
-Create an Implementation Plan for [YOUR APP].
-
-Context:
-- MVP Timeline: [WEEKS]
-- Team: [SOLO / TEAM SIZE]
-- Tech Stack: [FROM TECH_STACK.md]
-- Features: [P0 LIST FROM PRD.md]
-
-Generate a phased build plan with:
-1. PHASE 1 (Foundation): Project setup, env config, database
-2. PHASE 2 (Design): Design tokens, core components
-3. PHASE 3 (Auth): Backend endpoints, frontend screens
-4. PHASE 4 (Features): One step per P0 feature with backend + frontend tasks
-5. PHASE 5 (Testing): Unit tests + integration tests
-6. PHASE 6 (Deploy): Staging → Production
-
-For EACH step provide: duration estimate, task checklist, success criteria, doc references.
-Include milestone timeline and risk mitigation table.
-```
+| Reddit API access denied | Critical | Use official API, stay within ToS, have fallback UI |
+| Scope creep | High | Stick to PRD P0 only, say no to P1 features |
+| Free AI quality too low | Medium | Heuristic scoring is solid; AI replies are bonus |
+| App Store rejection | Medium | Follow all HIG, test IAP thoroughly |
+| Build timeline slip | Medium | Cut P0 feature 6 (notifications) if behind |
