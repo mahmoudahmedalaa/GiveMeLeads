@@ -3,8 +3,8 @@ import Foundation
 /// App-wide configuration loaded from environment
 enum AppConfig {
     // Supabase
-    static let supabaseURL = "https://placeholder.supabase.co"
-    static let supabaseAnonKey = "placeholder-key"
+    static let supabaseURL = "https://sgsugbwxkqcdxbulsrgt.supabase.co"
+    static let supabaseAnonKey = "sb_publishable_l2DpNT2iaR8xbnQuVmgt3g_jbWY4SXC"
     
     // Reddit
     static let redditClientID = "placeholder"

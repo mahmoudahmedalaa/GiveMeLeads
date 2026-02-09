@@ -46,3 +46,4 @@ Secrets.xcconfig
 # Misc
 *.log
 *.tmp
+.env
