@@ -8,15 +8,39 @@ final class LeadFeedViewModel {
     var savedLeads: [Lead] = []
     var isLoading = false
     var isRefreshing = false
+    var isScanning = false
+    var scanMessage: String?
     var error: String?
     var selectedLead: Lead?
     
     private let leadRepo: LeadRepositoryProtocol
+    private let scanService = RedditScanService()
     private var currentOffset = 0
     private let pageSize = 20
     
     init(leadRepo: LeadRepositoryProtocol = LeadRepository()) {
         self.leadRepo = leadRepo
+    }
+    
+    /// Trigger a Reddit scan for new leads
+    func scanForNewLeads(accessToken: String) async {
+        isScanning = true
+        scanMessage = nil
+        error = nil
+        
+        do {
+            let result = try await scanService.scanReddit(accessToken: accessToken)
+            scanMessage = "\(result.leadsFound) new lead\(result.leadsFound == 1 ? "" : "s") found"
+            
+            // Refresh leads list after scan
+            if result.leadsFound > 0 {
+                await fetchLeads()
+            }
+        } catch {
+            self.error = error.localizedDescription
+        }
+        
+        isScanning = false
     }
     
     /// Fetch new leads
