@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import Supabase
 
-/// Profile-aware lead feed — scans per-profile, clears on profile switch, shows 'up to date' on re-scan
+/// Profile-aware lead feed — NO auto-scan, refreshes profiles on appear, clean profile display
 @Observable
 final class LeadFeedViewModel {
     var leads: [Lead] = []
@@ -15,6 +15,7 @@ final class LeadFeedViewModel {
     var scanMessage: String?
     var error: String?
     var selectedLead: Lead?
+    var hasLoadedOnce = false
     
     private let leadRepo: LeadRepositoryProtocol
     private let keywordRepo: KeywordRepositoryProtocol
@@ -30,20 +31,71 @@ final class LeadFeedViewModel {
         self.keywordRepo = keywordRepo
     }
     
-    // MARK: - Profile Management
+    // MARK: - Initial Load (called on .task — NO auto-scan)
     
-    /// Load all user profiles and auto-select the first active one
-    func loadProfiles() async {
+    /// Load profiles + leads for the active profile. NEVER auto-scans.
+    func initialLoad() async {
+        guard !hasLoadedOnce else {
+            // On subsequent appearances, just refresh profiles in case one was deleted
+            await refreshProfiles()
+            return
+        }
+        hasLoadedOnce = true
+        isLoading = true
+        
         do {
             profiles = try await keywordRepo.fetchProfiles()
-            // Auto-select the first active profile if none selected
-            if selectedProfile == nil {
-                selectedProfile = profiles.first(where: \.isActive) ?? profiles.first
+            
+            // Auto-select: first active, or first profile
+            selectedProfile = profiles.first(where: \.isActive) ?? profiles.first
+            
+            // Fetch leads for selected profile (if any)
+            if selectedProfile != nil {
+                await fetchLeadsForSelectedProfile()
             }
         } catch {
             self.error = "Failed to load profiles"
         }
+        
+        isLoading = false
     }
+    
+    /// Refresh profiles from DB (catches deleted profiles, new profiles from setup)
+    func refreshProfiles() async {
+        do {
+            let freshProfiles = try await keywordRepo.fetchProfiles()
+            profiles = freshProfiles
+            
+            // If selected profile was deleted, clear it
+            if let selected = selectedProfile {
+                if !freshProfiles.contains(where: { $0.id == selected.id }) {
+                    // Profile was deleted — reset
+                    selectedProfile = freshProfiles.first(where: \.isActive) ?? freshProfiles.first
+                    leads = []
+                    scanMessage = nil
+                    error = nil
+                    currentOffset = 0
+                    
+                    if selectedProfile != nil {
+                        await fetchLeadsForSelectedProfile()
+                    }
+                } else {
+                    // Profile still exists — update it with fresh data (keyword count etc.)
+                    selectedProfile = freshProfiles.first { $0.id == selected.id }
+                }
+            } else {
+                // No profile selected — pick one
+                selectedProfile = freshProfiles.first(where: \.isActive) ?? freshProfiles.first
+                if selectedProfile != nil {
+                    await fetchLeadsForSelectedProfile()
+                }
+            }
+        } catch {
+            // Silently fail — we already have cached profiles
+        }
+    }
+    
+    // MARK: - Profile Switching
     
     /// Switch to a different profile — clears old results and loads new ones
     func switchToProfile(_ profile: TrackingProfile) async {
@@ -63,13 +115,13 @@ final class LeadFeedViewModel {
             try await leadRepo.clearLeadsForProfile(profileId: profile.id)
             leads = []
             currentOffset = 0
-            scanMessage = "Results cleared. Tap scan to find new leads."
+            scanMessage = "Results cleared. Tap 🔍 to find new leads."
         } catch {
             self.error = "Failed to clear results"
         }
     }
     
-    // MARK: - Scanning
+    // MARK: - Scanning (ONLY when user taps scan button)
     
     /// Scan Reddit for the selected profile only
     func scanForNewLeads() async {
@@ -194,9 +246,9 @@ final class LeadFeedViewModel {
             }
             
             if totalFound > 0 {
-                scanMessage = "🎯 \(totalFound) new lead\(totalFound == 1 ? "" : "s") found for \(profile.name)!"
+                scanMessage = "🎯 \(totalFound) new lead\(totalFound == 1 ? "" : "s") found!"
             } else {
-                scanMessage = "✅ You're up to date! No new Reddit posts matching \"\(profile.name)\" right now. Check back later."
+                scanMessage = "No new leads found right now. Reddit might not have matching posts yet — check back later."
             }
             
             await fetchLeadsForSelectedProfile()
@@ -206,17 +258,6 @@ final class LeadFeedViewModel {
         }
         
         isScanning = false
-    }
-    
-    /// Auto-scan on first load if leads are empty and profiles exist
-    func autoScanIfNeeded() async {
-        guard leads.isEmpty, !isScanning, selectedProfile != nil else { return }
-        
-        // Only auto-scan if the profile has keywords
-        guard let profile = selectedProfile,
-              let keywords = profile.keywords, !keywords.isEmpty else { return }
-        
-        await scanForNewLeads()
     }
     
     // MARK: - Fetching
@@ -266,6 +307,7 @@ final class LeadFeedViewModel {
     /// Pull to refresh
     func refresh() async {
         isRefreshing = true
+        await refreshProfiles()
         await fetchLeadsForSelectedProfile()
         isRefreshing = false
     }

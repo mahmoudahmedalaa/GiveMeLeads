@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Smart onboarding: Describe your product → AI suggests keywords → Scan Reddit → Find leads
+/// Smart onboarding: Describe your product → AI suggests keywords → Save profile → Scan Reddit
 struct ProductSetupScreen: View {
     @Environment(\.dismiss) private var dismiss
     @State private var viewModel = ProductSetupViewModel()
@@ -17,7 +17,6 @@ struct ProductSetupScreen: View {
             ScrollView {
                 VStack(spacing: AppSpacing.spacing6) {
                     if isModal {
-                        // Close button for modal presentation
                         HStack {
                             Spacer()
                             Button(action: { dismiss() }) {
@@ -38,6 +37,8 @@ struct ProductSetupScreen: View {
                         analyzingPhase
                     case .review:
                         reviewPhase
+                    case .saving:
+                        savingPhase
                     case .scanning:
                         scanningPhase
                     case .complete:
@@ -75,6 +76,7 @@ struct ProductSetupScreen: View {
         case .describe: "sparkles"
         case .analyzing: "brain.head.profile"
         case .review: "checklist"
+        case .saving: "arrow.down.circle"
         case .scanning: "antenna.radiowaves.left.and.right"
         case .complete: "checkmark.circle.fill"
         }
@@ -85,18 +87,25 @@ struct ProductSetupScreen: View {
         case .describe: "What do you offer?"
         case .analyzing: "Analyzing..."
         case .review: "Review Your Setup"
+        case .saving: "Saving Profile..."
         case .scanning: "Scanning Reddit..."
-        case .complete: "You're All Set!"
+        case .complete: viewModel.leadsFound > 0 ? "You're All Set!" : "Profile Created!"
         }
     }
     
     private var phaseSubtitle: String {
         switch viewModel.phase {
-        case .describe: "Describe your product or service\nand we'll find people looking for it"
-        case .analyzing: "Finding the best keywords and\nsubreddits for your product"
-        case .review: "Edit the keywords and subreddits\nwe'll use to find leads"
-        case .scanning: viewModel.scanProgress
-        case .complete: "\(viewModel.leadsFound) leads found and ready to review"
+        case .describe: return "Describe your product or service\nand we'll find people looking for it"
+        case .analyzing: return "Finding the best keywords and\nsubreddits for your product"
+        case .review: return "Edit the keywords and subreddits\nwe'll use to find leads"
+        case .saving: return "Creating your profile..."
+        case .scanning: return viewModel.scanProgress
+        case .complete:
+            if viewModel.leadsFound > 0 {
+                return "\(viewModel.leadsFound) leads found and ready to review"
+            } else {
+                return "Your profile is saved.\nHead to Leads to scan Reddit."
+            }
         }
     }
     
@@ -104,7 +113,6 @@ struct ProductSetupScreen: View {
     
     private var describePhase: some View {
         VStack(spacing: AppSpacing.spacing5) {
-            // Text input
             VStack(alignment: .leading, spacing: AppSpacing.spacing2) {
                 Text("Product Description")
                     .font(AppTypography.bodyMedium)
@@ -217,7 +225,6 @@ struct ProductSetupScreen: View {
                     }
                 }
                 
-                // Add keyword input
                 HStack(spacing: AppSpacing.spacing2) {
                     TextField("Add keyword...", text: $newKeywordInput)
                         .font(AppTypography.bodySmall)
@@ -270,7 +277,6 @@ struct ProductSetupScreen: View {
                     }
                 }
                 
-                // Add subreddit input
                 HStack(spacing: AppSpacing.spacing2) {
                     TextField("Add subreddit...", text: $newSubredditInput)
                         .font(AppTypography.bodySmall)
@@ -319,10 +325,9 @@ struct ProductSetupScreen: View {
                     .foregroundColor(AppColors.scoreLow)
             }
             
-            // Action buttons
             VStack(spacing: AppSpacing.spacing3) {
-                PrimaryButton("🚀 Start Finding Leads") {
-                    Task { await viewModel.confirmAndScan() }
+                PrimaryButton("💾 Save Profile") {
+                    Task { await viewModel.confirmAndSave() }
                 }
                 
                 Button("← Edit Description") {
@@ -334,52 +339,37 @@ struct ProductSetupScreen: View {
         }
     }
     
-    // MARK: - Phase 4: Scanning
+    // MARK: - Phase: Saving (fast — 1-2 seconds)
     
-    private var scanningPhase: some View {
+    private var savingPhase: some View {
         VStack(spacing: AppSpacing.spacing5) {
-            // Animated radar
-            ZStack {
-                ForEach(0..<3, id: \.self) { i in
-                    Circle()
-                        .stroke(AppColors.primary500.opacity(0.3), lineWidth: 2)
-                        .frame(width: CGFloat(60 + i * 40), height: CGFloat(60 + i * 40))
-                        .scaleEffect(1.0)
-                        .opacity(0.7)
-                        .animation(
-                            .easeInOut(duration: 1.5)
-                            .repeatForever(autoreverses: true)
-                            .delay(Double(i) * 0.3),
-                            value: viewModel.phase
-                        )
-                }
-                
-                Image(systemName: "antenna.radiowaves.left.and.right")
-                    .font(.system(size: 32))
-                    .foregroundStyle(AppColors.primaryGradient)
-            }
-            .frame(height: 160)
+            ProgressView()
+                .scaleEffect(1.5)
+                .tint(AppColors.primary500)
+                .padding()
             
-            Text(viewModel.scanProgress)
+            Text("Saving your profile...")
                 .font(AppTypography.bodyMedium)
                 .foregroundColor(AppColors.textSecondary)
                 .multilineTextAlignment(.center)
-                .animation(.easeInOut, value: viewModel.scanProgress)
             
-            ProgressView()
-                .tint(AppColors.primary500)
-            
-            if let error = viewModel.error {
-                Text(error)
-                    .font(AppTypography.bodySmall)
-                    .foregroundColor(AppColors.scoreLow)
-                    .multilineTextAlignment(.center)
-            }
+            Text("This only takes a moment")
+                .font(AppTypography.caption)
+                .foregroundColor(AppColors.textTertiary)
         }
-        .padding(.vertical, AppSpacing.spacing6)
+        .padding(.vertical, AppSpacing.spacing8)
     }
     
-    // MARK: - Phase 5: Complete
+    // MARK: - Phase: Scanning Reddit (slow — 10-20 seconds, with timer)
+    
+    private var scanningPhase: some View {
+        ScanningProgressView(
+            progress: viewModel.scanProgress,
+            phase: viewModel.phase
+        )
+    }
+    
+    // MARK: - Phase: Complete
     
     private var completePhase: some View {
         VStack(spacing: AppSpacing.spacing5) {
@@ -390,19 +380,26 @@ struct ProductSetupScreen: View {
                 statBadge(value: "\(viewModel.suggestedSubreddits.count)", label: "Subreddits")
             }
             
-            if viewModel.leadsFound == 0 {
-                VStack(spacing: AppSpacing.spacing2) {
-                    Text("No leads matched your keywords this time")
+            if viewModel.leadsFound == 0 && viewModel.phase == .complete {
+                VStack(spacing: AppSpacing.spacing3) {
+                    Text("Your profile is saved and ready!")
                         .font(AppTypography.bodyMedium)
                         .foregroundColor(AppColors.textSecondary)
-                    Text("Your profile is set up — leads will appear as new posts match your keywords")
+                    Text("Head to the Leads tab and tap scan to find leads from Reddit.")
                         .font(AppTypography.bodySmall)
                         .foregroundColor(AppColors.textTertiary)
                         .multilineTextAlignment(.center)
                 }
             }
             
-            PrimaryButton(viewModel.leadsFound > 0 ? "🎯 View Your Leads" : "Go to Dashboard") {
+            if let error = viewModel.error {
+                Text(error)
+                    .font(AppTypography.bodySmall)
+                    .foregroundColor(AppColors.scoreLow)
+                    .multilineTextAlignment(.center)
+            }
+            
+            PrimaryButton("🎯 Go to Leads") {
                 onComplete()
             }
         }
@@ -422,5 +419,62 @@ struct ProductSetupScreen: View {
         .padding(AppSpacing.spacing3)
         .background(AppColors.bg800)
         .clipShape(RoundedRectangle(cornerRadius: AppRadius.sm))
+    }
+}
+
+// MARK: - Scanning Progress (with elapsed timer)
+
+struct ScanningProgressView: View {
+    let progress: String
+    let phase: ProductSetupViewModel.SetupPhase
+    @State private var elapsed: Int = 0
+    let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    
+    var body: some View {
+        VStack(spacing: AppSpacing.spacing5) {
+            // Animated radar
+            ZStack {
+                ForEach(0..<3, id: \.self) { i in
+                    Circle()
+                        .stroke(AppColors.primary500.opacity(0.3), lineWidth: 2)
+                        .frame(width: CGFloat(60 + i * 40), height: CGFloat(60 + i * 40))
+                        .scaleEffect(1.0)
+                        .opacity(0.7)
+                        .animation(
+                            .easeInOut(duration: 1.5)
+                            .repeatForever(autoreverses: true)
+                            .delay(Double(i) * 0.3),
+                            value: phase
+                        )
+                }
+                
+                Image(systemName: "antenna.radiowaves.left.and.right")
+                    .font(.system(size: 32))
+                    .foregroundStyle(AppColors.primaryGradient)
+            }
+            .frame(height: 160)
+            
+            Text(progress)
+                .font(AppTypography.bodyMedium)
+                .foregroundColor(AppColors.textSecondary)
+                .multilineTextAlignment(.center)
+                .animation(.easeInOut, value: progress)
+            
+            // Elapsed timer
+            Text("\(elapsed)s elapsed")
+                .font(.system(size: 32, weight: .bold, design: .monospaced))
+                .foregroundStyle(AppColors.primaryGradient)
+            
+            Text("Usually takes 10-20 seconds")
+                .font(AppTypography.caption)
+                .foregroundColor(AppColors.textTertiary)
+            
+            ProgressView()
+                .tint(AppColors.primary500)
+        }
+        .padding(.vertical, AppSpacing.spacing6)
+        .onReceive(timer) { _ in
+            elapsed += 1
+        }
     }
 }

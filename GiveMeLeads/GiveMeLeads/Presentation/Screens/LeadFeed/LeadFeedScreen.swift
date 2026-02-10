@@ -12,7 +12,7 @@ struct LeadFeedScreen: View {
                     .ignoresSafeArea()
                 
                 VStack(spacing: 0) {
-                    // Profile Selector
+                    // Profile Selector (only when multiple profiles)
                     if viewModel.profiles.count > 1 {
                         profileSelector
                     } else if let profile = viewModel.selectedProfile {
@@ -22,6 +22,8 @@ struct LeadFeedScreen: View {
                     // Content
                     if viewModel.isLoading {
                         loadingView
+                    } else if viewModel.profiles.isEmpty {
+                        noProfileState
                     } else if viewModel.leads.isEmpty {
                         emptyState
                     } else {
@@ -32,15 +34,21 @@ struct LeadFeedScreen: View {
             .navigationTitle("Leads")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
+                // Clear button (always visible when there are leads)
                 ToolbarItem(placement: .topBarLeading) {
                     if !viewModel.leads.isEmpty {
                         Button(action: { showClearConfirm = true }) {
-                            Image(systemName: "trash")
-                                .font(.system(size: 14))
-                                .foregroundColor(AppColors.textTertiary)
+                            HStack(spacing: 4) {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 13))
+                                Text("Clear")
+                                    .font(.system(size: 13, weight: .medium))
+                            }
+                            .foregroundColor(AppColors.scoreLow)
                         }
                     }
                 }
+                // Scan button
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(action: { triggerScan() }) {
                         if viewModel.isScanning {
@@ -51,16 +59,21 @@ struct LeadFeedScreen: View {
                                 .foregroundColor(AppColors.primary400)
                         }
                     }
-                    .disabled(viewModel.isScanning)
+                    .disabled(viewModel.isScanning || viewModel.selectedProfile == nil)
                 }
             }
             .refreshable {
                 await viewModel.refresh()
             }
             .task {
-                await viewModel.loadProfiles()
-                await viewModel.fetchLeadsForSelectedProfile()
-                await viewModel.autoScanIfNeeded()
+                // NO auto-scan — just load profiles + existing leads
+                await viewModel.initialLoad()
+            }
+            .onAppear {
+                // Refresh profiles on every tab switch (catches deleted profiles)
+                if viewModel.hasLoadedOnce {
+                    Task { await viewModel.refreshProfiles() }
+                }
             }
             .alert(
                 viewModel.error != nil ? "Scan Issue" : "Scan Complete",
@@ -78,12 +91,12 @@ struct LeadFeedScreen: View {
                 }
             }
             .alert("Clear Results?", isPresented: $showClearConfirm) {
-                Button("Clear", role: .destructive) {
+                Button("Clear All", role: .destructive) {
                     Task { await viewModel.clearResults() }
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("This will remove all unsaved leads for this profile. Saved leads will remain.")
+                Text("This will remove all unsaved leads for this profile. Saved leads won't be affected.")
             }
         }
     }
@@ -136,6 +149,7 @@ struct LeadFeedScreen: View {
         .background(AppColors.bg800.opacity(0.5))
     }
     
+    /// Single profile — show name only (no keyword count to avoid stale data)
     private func singleProfileHeader(_ profile: TrackingProfile) -> some View {
         HStack {
             Circle()
@@ -145,20 +159,39 @@ struct LeadFeedScreen: View {
                 .font(AppTypography.bodySmall)
                 .foregroundColor(AppColors.textSecondary)
             
-            Text("·")
-                .foregroundColor(AppColors.textTertiary)
-            
-            Text("\(profile.keywords?.count ?? 0) keywords")
-                .font(AppTypography.caption)
-                .foregroundColor(AppColors.textTertiary)
-            
             Spacer()
         }
         .padding(.horizontal, AppSpacing.spacing4)
         .padding(.vertical, AppSpacing.spacing2)
     }
     
-    // MARK: - Empty State
+    // MARK: - No Profile State
+    
+    private var noProfileState: some View {
+        VStack(spacing: AppSpacing.spacing6) {
+            Spacer()
+            
+            Image(systemName: "plus.circle.dashed")
+                .font(.system(size: 56))
+                .foregroundStyle(AppColors.primaryGradient)
+            
+            VStack(spacing: AppSpacing.spacing2) {
+                Text("No Profiles Yet")
+                    .font(AppTypography.heading2)
+                    .foregroundColor(AppColors.textPrimary)
+                
+                Text("Create a profile in the Profiles tab\nto start finding leads")
+                    .font(AppTypography.bodyMedium)
+                    .foregroundColor(AppColors.textSecondary)
+                    .multilineTextAlignment(.center)
+            }
+            
+            Spacer()
+        }
+        .padding(AppSpacing.spacing8)
+    }
+    
+    // MARK: - Empty State (has a profile but no leads)
     
     private var emptyState: some View {
         VStack(spacing: AppSpacing.spacing6) {
@@ -170,7 +203,7 @@ struct LeadFeedScreen: View {
             
             VStack(spacing: AppSpacing.spacing2) {
                 if let profile = viewModel.selectedProfile {
-                    Text("No Leads for \"\(profile.name)\"")
+                    Text("No leads for \"\(profile.name)\"")
                         .font(AppTypography.heading2)
                         .foregroundColor(AppColors.textPrimary)
                 } else {
@@ -185,7 +218,7 @@ struct LeadFeedScreen: View {
                         .foregroundColor(AppColors.textSecondary)
                         .multilineTextAlignment(.center)
                 } else {
-                    Text("Tap scan to search Reddit for\npeople looking for products like yours")
+                    Text("Tap the scan button to search Reddit\nfor people looking for your product")
                         .font(AppTypography.bodyMedium)
                         .foregroundColor(AppColors.textSecondary)
                         .multilineTextAlignment(.center)
@@ -202,14 +235,7 @@ struct LeadFeedScreen: View {
             .disabled(viewModel.isScanning || viewModel.selectedProfile == nil)
             
             if viewModel.isScanning {
-                VStack(spacing: AppSpacing.spacing2) {
-                    Text("Searching across your keywords...")
-                        .font(AppTypography.bodySmall)
-                        .foregroundColor(AppColors.textTertiary)
-                    Text("This may take 10-15 seconds")
-                        .font(AppTypography.caption)
-                        .foregroundColor(AppColors.textTertiary)
-                }
+                ScanTimerView()
             }
             
             Spacer()
@@ -242,12 +268,22 @@ struct LeadFeedScreen: View {
                     .cornerRadius(AppRadius.sm)
                 }
                 
-                // Lead count
+                // Lead count + clear
                 HStack {
                     Text("\(viewModel.leads.count) lead\(viewModel.leads.count == 1 ? "" : "s")")
                         .font(AppTypography.caption)
                         .foregroundColor(AppColors.textTertiary)
                     Spacer()
+                    
+                    Button(action: { showClearConfirm = true }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "trash")
+                                .font(.system(size: 11))
+                            Text("Clear all")
+                                .font(AppTypography.caption)
+                        }
+                        .foregroundColor(AppColors.textTertiary)
+                    }
                 }
                 
                 ForEach(viewModel.leads) { lead in
@@ -302,6 +338,32 @@ struct LeadFeedScreen: View {
                 }
             }
             .padding(.horizontal, AppSpacing.spacing4)
+        }
+    }
+}
+
+// MARK: - Scan Timer View
+
+/// Shows an elapsed timer during scanning so user knows the app is working
+struct ScanTimerView: View {
+    @State private var elapsed: Int = 0
+    let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+    
+    var body: some View {
+        VStack(spacing: AppSpacing.spacing2) {
+            ProgressView()
+                .tint(AppColors.primary400)
+            
+            Text("Searching Reddit... \(elapsed)s")
+                .font(AppTypography.bodySmall)
+                .foregroundColor(AppColors.textTertiary)
+            
+            Text("This usually takes 10-20 seconds")
+                .font(AppTypography.caption)
+                .foregroundColor(AppColors.textTertiary.opacity(0.7))
+        }
+        .onReceive(timer) { _ in
+            elapsed += 1
         }
     }
 }

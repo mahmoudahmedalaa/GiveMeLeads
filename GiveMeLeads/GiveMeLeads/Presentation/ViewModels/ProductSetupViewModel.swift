@@ -12,8 +12,9 @@ final class ProductSetupViewModel {
         case describe    // User types product description
         case analyzing   // Running analysis
         case review      // User reviews keywords + subreddits
-        case scanning    // Searching Reddit
-        case complete    // Done — leads found
+        case saving      // Creating profile (fast — 1-2 seconds)
+        case scanning    // Searching Reddit (slow — 10-20 seconds)
+        case complete    // Done — profile created, optionally scanned
     }
     
     var phase: SetupPhase = .describe
@@ -28,6 +29,8 @@ final class ProductSetupViewModel {
     // Scan results
     var leadsFound: Int = 0
     var scanProgress: String = ""
+    var scanElapsed: Int = 0
+    var createdProfileId: UUID?
     
     // Internal
     private let keywordRepo: KeywordRepositoryProtocol
@@ -93,8 +96,8 @@ final class ProductSetupViewModel {
         suggestedSubreddits.append(trimmed)
     }
     
-    /// Confirm selections, create profile, and scan Reddit
-    func confirmAndScan() async {
+    /// Create profile + keywords ONLY (fast — 1-2 seconds). No scanning.
+    func confirmAndSave() async {
         guard !suggestedKeywords.isEmpty else {
             error = "Add at least one keyword"
             return
@@ -105,7 +108,7 @@ final class ProductSetupViewModel {
         }
         
         error = nil
-        phase = .scanning
+        phase = .saving
         scanProgress = "Creating profile..."
         
         do {
@@ -114,6 +117,8 @@ final class ProductSetupViewModel {
                 name: profileName,
                 subreddits: suggestedSubreddits
             )
+            
+            createdProfileId = profile.id
             
             // 2. Add keywords to profile
             scanProgress = "Adding keywords..."
@@ -125,7 +130,30 @@ final class ProductSetupViewModel {
                 )
             }
             
-            // 3. Search Reddit posts AND comments
+            // Done! Profile saved — user can scan from the Leads tab
+            phase = .complete
+            
+        } catch {
+            self.error = error.localizedDescription
+            phase = .review // Go back to review so they can retry
+        }
+    }
+    
+    /// Optionally scan Reddit right after profile creation
+    func scanNow() async {
+        guard let profileId = createdProfileId else { return }
+        
+        phase = .scanning
+        scanProgress = "Searching Reddit..."
+        scanElapsed = 0
+        error = nil
+        
+        do {
+            guard let userId = try? await SupabaseManager.shared.client.auth.session.user.id else {
+                throw AppError.authFailed("Not authenticated")
+            }
+            
+            // Search Reddit posts AND comments
             scanProgress = "Searching Reddit posts..."
             let posts = try await redditSearch.search(
                 keywords: suggestedKeywords,
@@ -142,24 +170,20 @@ final class ProductSetupViewModel {
             
             scanProgress = "Analyzing \(posts.count) posts + \(comments.count) comments..."
             
-            guard let userId = try? await SupabaseManager.shared.client.auth.session.user.id else {
-                throw AppError.authFailed("Not authenticated")
-            }
-            
             // Build all leads in memory, then batch insert
             var leadsToSave: [NewLead] = []
             
-            // Analyze posts — generates insights, snippets, and approach suggestions
+            // Analyze posts
             for post in posts {
                 guard let intel = redditSearch.analyzePost(
                     post,
                     keywords: suggestedKeywords,
                     productDescription: productDescription
-                ) else { continue } // Quality gate: nil = not worth showing
+                ) else { continue }
                 
                 leadsToSave.append(NewLead(
                     userId: userId,
-                    profileId: profile.id,
+                    profileId: profileId,
                     keywordId: nil,
                     redditPostId: "t3_\(post.id)",
                     subreddit: post.subreddit,
@@ -180,7 +204,7 @@ final class ProductSetupViewModel {
                 ))
             }
             
-            // Analyze comments — people asking for solutions in threads
+            // Analyze comments
             for comment in comments {
                 guard let intel = redditSearch.analyzeComment(
                     comment,
@@ -190,7 +214,7 @@ final class ProductSetupViewModel {
                 
                 leadsToSave.append(NewLead(
                     userId: userId,
-                    profileId: profile.id,
+                    profileId: profileId,
                     keywordId: nil,
                     redditPostId: "t1_\(comment.id)",
                     subreddit: comment.subreddit,
@@ -211,7 +235,7 @@ final class ProductSetupViewModel {
                 ))
             }
             
-            // 4. Batch insert all leads in one API call (instead of 72 individual calls)
+            // Batch insert
             scanProgress = "Saving \(leadsToSave.count) leads..."
             if !leadsToSave.isEmpty {
                 do {
@@ -220,7 +244,6 @@ final class ProductSetupViewModel {
                         .insert(leadsToSave)
                         .execute()
                 } catch {
-                    // If batch fails (duplicates), fall back to individual inserts for new ones only
                     for lead in leadsToSave {
                         try? await SupabaseManager.shared.client
                             .from("leads")
@@ -235,7 +258,7 @@ final class ProductSetupViewModel {
             
         } catch {
             self.error = error.localizedDescription
-            phase = .review // Go back to review so they can retry
+            phase = .complete // Stay on complete — profile is already saved
         }
     }
     
