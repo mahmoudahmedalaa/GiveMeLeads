@@ -81,6 +81,7 @@
 		836D7BF115BDA78FD91A95A0 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		845D86439E87E6E6E95C2014 /* TrackingProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackingProfile.swift; sourceTree = "<group>"; };
 		85DC1D8ACCD6B751BF961C38 /* ChipView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChipView.swift; sourceTree = "<group>"; };
+		901DFA56ADB0BFE5CF310D19 /* GiveMeLeads.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GiveMeLeads.entitlements; sourceTree = "<group>"; };
 		9A51457E1E36F98C83BAB5AE /* AppColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppColors.swift; sourceTree = "<group>"; };
 		AAEFAA14C125873EA891EAD1 /* AIReply.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIReply.swift; sourceTree = "<group>"; };
 		AB4F1C7C2BD1B027655BA7D7 /* RepositoryProtocols.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepositoryProtocols.swift; sourceTree = "<group>"; };
@@ -305,6 +306,7 @@
 				3763AB03C57E38FA0A9D9CD2 /* Infrastructure */,
 				851CA55AFC5AD6DAD60ABA2A /* Presentation */,
 				B0A51629C670D2DA8A1F333F /* Resources */,
+				901DFA56ADB0BFE5CF310D19 /* GiveMeLeads.entitlements */,
 			);
 			path = GiveMeLeads;
 			sourceTree = "<group>";
@@ -449,6 +451,7 @@
 				LastUpgradeCheck = 1600;
 				TargetAttributes = {
 					DACEC5273AA498BCADDF5EE0 = {
+						DevelopmentTeam = 2S42RLH67Y;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -618,8 +621,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = GiveMeLeads/GiveMeLeads.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 2S42RLH67Y;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -650,8 +655,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = GiveMeLeads/GiveMeLeads.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 2S42RLH67Y;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

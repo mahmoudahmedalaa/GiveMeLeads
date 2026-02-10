@@ -39,6 +39,12 @@ targets:
     settings:
       base:
         CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: 2S42RLH67Y
+    entitlements:
+      path: GiveMeLeads/GiveMeLeads.entitlements
+      properties:
+        com.apple.developer.applesignin:
+          - Default
 
   GiveMeLeadsTests:
     type: bundle.unit-test
