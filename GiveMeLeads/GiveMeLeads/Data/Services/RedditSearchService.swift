@@ -55,10 +55,12 @@ final class RedditSearchService {
         var allPosts: [RedditPost] = []
         var seenIds = Set<String>()
         
-        for keyword in keywords.prefix(5) {
+        // Search with specific subreddits first
+        let subredditStr = subreddits.prefix(8).joined(separator: "+")
+        
+        for keyword in keywords.prefix(8) {
             let query = keyword.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? keyword
-            let subredditStr = subreddits.prefix(5).joined(separator: "+")
-            let urlString = "https://www.reddit.com/r/\(subredditStr)/search.json?q=\(query)&sort=new&limit=\(limit)&restrict_sr=1&t=week"
+            let urlString = "https://www.reddit.com/r/\(subredditStr)/search.json?q=\(query)&sort=relevance&limit=\(limit)&restrict_sr=1&t=month"
             
             guard let url = URL(string: urlString) else { continue }
             var request = URLRequest(url: url)
@@ -77,9 +79,38 @@ final class RedditSearchService {
                         allPosts.append(post)
                     }
                 }
-                try await Task.sleep(nanoseconds: 1_000_000_000)
+                try await Task.sleep(nanoseconds: 800_000_000)
             } catch { continue }
         }
+        
+        // FALLBACK: If subreddit-specific search found very few results, search r/all
+        if allPosts.count < 5 {
+            for keyword in keywords.prefix(3) {
+                let query = keyword.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? keyword
+                let urlString = "https://www.reddit.com/search.json?q=\(query)&sort=relevance&limit=\(limit)&t=month"
+                
+                guard let url = URL(string: urlString) else { continue }
+                var request = URLRequest(url: url)
+                request.setValue("ios:com.givemeleads:v1.0 (by /u/givemeleads)", forHTTPHeaderField: "User-Agent")
+                request.timeoutInterval = 15
+                
+                do {
+                    let (data, response) = try await URLSession.shared.data(for: request)
+                    guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else { continue }
+                    let listing = try JSONDecoder().decode(RedditListing.self, from: data)
+                    
+                    for child in listing.data.children {
+                        let post = child.data
+                        if !seenIds.contains(post.id) && post.author != "[deleted]" && post.author != "AutoModerator" {
+                            seenIds.insert(post.id)
+                            allPosts.append(post)
+                        }
+                    }
+                    try await Task.sleep(nanoseconds: 800_000_000)
+                } catch { continue }
+            }
+        }
+        
         return allPosts
     }
     
@@ -89,10 +120,11 @@ final class RedditSearchService {
         var allComments: [RedditComment] = []
         var seenIds = Set<String>()
         
-        for keyword in keywords.prefix(3) {
+        let subredditStr = subreddits.prefix(8).joined(separator: "+")
+        
+        for keyword in keywords.prefix(5) {
             let query = keyword.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? keyword
-            let subredditStr = subreddits.prefix(5).joined(separator: "+")
-            let urlString = "https://www.reddit.com/r/\(subredditStr)/search.json?q=\(query)&sort=new&limit=\(limit)&restrict_sr=1&t=week&type=comment"
+            let urlString = "https://www.reddit.com/r/\(subredditStr)/search.json?q=\(query)&sort=relevance&limit=\(limit)&restrict_sr=1&t=month&type=comment"
             
             guard let url = URL(string: urlString) else { continue }
             var request = URLRequest(url: url)
@@ -111,7 +143,7 @@ final class RedditSearchService {
                         allComments.append(comment)
                     }
                 }
-                try await Task.sleep(nanoseconds: 1_000_000_000)
+                try await Task.sleep(nanoseconds: 800_000_000)
             } catch { continue }
         }
         return allComments
@@ -258,7 +290,7 @@ final class RedditSearchService {
         let overall = (intentScore * 4 + urgencyScore * 3 + fitScore * 3) / 10
         
         // Quality gate — only return leads worth showing
-        guard overall >= 35 else { return nil }
+        guard overall >= 20 else { return nil }
         
         let breakdown = ScoreBreakdown(intent: intentScore, urgency: urgencyScore, fit: fitScore)
         

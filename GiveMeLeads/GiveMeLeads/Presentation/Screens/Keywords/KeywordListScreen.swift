@@ -3,6 +3,8 @@ import SwiftUI
 struct KeywordListScreen: View {
     @Environment(AppRouter.self) private var router
     @State private var viewModel = KeywordViewModel()
+    @State private var profileToDelete: UUID?
+    @State private var showDeleteConfirm = false
     
     var body: some View {
         NavigationStack {
@@ -35,6 +37,24 @@ struct KeywordListScreen: View {
             }
             .task {
                 await viewModel.fetchProfiles()
+            }
+            .onAppear {
+                // Refresh profiles when returning to this tab
+                if !viewModel.profiles.isEmpty {
+                    Task { await viewModel.fetchProfiles() }
+                }
+            }
+            .alert("Delete Profile?", isPresented: $showDeleteConfirm) {
+                Button("Delete", role: .destructive) {
+                    if let id = profileToDelete {
+                        Task { await viewModel.deleteProfile(id) }
+                    }
+                }
+                Button("Cancel", role: .cancel) {
+                    profileToDelete = nil
+                }
+            } message: {
+                Text("This will permanently delete this profile and its keywords. Leads already found won't be affected.")
             }
         }
     }
@@ -143,9 +163,10 @@ struct KeywordListScreen: View {
                 
                 Spacer()
                 
-                // Delete button
+                // Delete button — requires confirmation
                 Button(action: {
-                    Task { await viewModel.deleteProfile(profile.id) }
+                    profileToDelete = profile.id
+                    showDeleteConfirm = true
                 }) {
                     Image(systemName: "trash")
                         .foregroundColor(AppColors.error.opacity(0.7))

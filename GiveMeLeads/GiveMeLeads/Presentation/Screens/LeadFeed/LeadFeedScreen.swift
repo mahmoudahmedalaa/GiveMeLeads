@@ -70,10 +70,8 @@ struct LeadFeedScreen: View {
                 await viewModel.initialLoad()
             }
             .onAppear {
-                // Refresh profiles on every tab switch (catches deleted profiles)
-                if viewModel.hasLoadedOnce {
-                    Task { await viewModel.refreshProfiles() }
-                }
+                // ALWAYS refresh profiles on tab switch — catches new/deleted profiles
+                Task { await viewModel.refreshProfiles() }
             }
             .alert(
                 viewModel.error != nil ? "Scan Issue" : "Scan Complete",
