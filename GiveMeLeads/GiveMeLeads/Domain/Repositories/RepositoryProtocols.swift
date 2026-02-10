@@ -18,12 +18,16 @@ protocol AuthRepositoryProtocol {
 protocol LeadRepositoryProtocol {
     /// Fetch leads for the current user, sorted by score
     func fetchLeads(status: LeadStatus?, limit: Int, offset: Int) async throws -> [Lead]
+    /// Fetch leads for a specific profile
+    func fetchLeads(profileId: UUID, status: LeadStatus?, limit: Int, offset: Int) async throws -> [Lead]
     /// Update a lead's status
     func updateLeadStatus(leadId: UUID, status: LeadStatus) async throws
     /// Get a single lead by ID
     func getLead(id: UUID) async throws -> Lead?
     /// Get count of leads by status
     func getLeadCount(status: LeadStatus?) async throws -> Int
+    /// Clear all leads for a specific profile
+    func clearLeadsForProfile(profileId: UUID) async throws
 }
 
 /// Protocol for keyword/profile operations

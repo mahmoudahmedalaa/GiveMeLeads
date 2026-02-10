@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Lead detail view with score breakdown, post content, and actions
+/// Action-oriented lead detail — shows WHY this lead matters, the key snippet, and HOW to engage
 struct LeadDetailScreen: View {
     let lead: Lead
     let onStatusChange: (LeadStatus) -> Void
@@ -14,18 +14,24 @@ struct LeadDetailScreen: View {
                 .ignoresSafeArea()
             
             ScrollView {
-                VStack(alignment: .leading, spacing: AppSpacing.spacing6) {
-                    // Score Section
-                    scoreSection
+                VStack(alignment: .leading, spacing: AppSpacing.spacing5) {
+                    // 1. Why This Lead Matters
+                    insightSection
                     
-                    // Post Content
+                    // 2. The Key Snippet
+                    snippetSection
+                    
+                    // 3. How To Approach
+                    approachSection
+                    
+                    // 4. Original Post
                     contentSection
                     
-                    // Actions
+                    // 5. Actions
                     actionSection
                 }
                 .padding(.horizontal, AppSpacing.spacing4)
-                .padding(.bottom, AppSpacing.spacing12)
+                .padding(.bottom, 100)
             }
         }
         .navigationTitle("Lead Detail")
@@ -33,8 +39,12 @@ struct LeadDetailScreen: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(action: { openRedditPost() }) {
-                    Image(systemName: "safari")
-                        .foregroundColor(AppColors.primary400)
+                    HStack(spacing: 4) {
+                        Image(systemName: "safari")
+                        Text("Open")
+                    }
+                    .font(AppTypography.bodySmall)
+                    .foregroundColor(AppColors.primary400)
                 }
             }
         }
@@ -44,45 +54,142 @@ struct LeadDetailScreen: View {
         }
     }
     
-    // MARK: - Score Section
+    // MARK: - Why This Lead Matters
     
-    private var scoreSection: some View {
-        VStack(spacing: AppSpacing.spacing4) {
+    private var insightSection: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.spacing3) {
             HStack {
-                if let score = lead.score {
-                    ScoreBadge(score: score, size: .large)
-                }
+                Image(systemName: "sparkle")
+                    .foregroundColor(AppColors.warning)
+                Text("Why This Lead Matters")
+                    .font(AppTypography.heading3)
+                    .foregroundColor(AppColors.textPrimary)
                 
                 Spacer()
                 
-                VStack(alignment: .trailing, spacing: AppSpacing.spacing1) {
-                    Text("r/\(lead.subreddit)")
+                if let score = lead.score {
+                    ScoreBadge(score: score, size: .large)
+                }
+            }
+            
+            if let insight = lead.relevanceInsight {
+                Text(insight)
+                    .font(AppTypography.bodyMedium)
+                    .foregroundColor(AppColors.textSecondary)
+                    .lineSpacing(4)
+            } else {
+                Text("This lead matched your tracking keywords.")
+                    .font(AppTypography.bodyMedium)
+                    .foregroundColor(AppColors.textTertiary)
+            }
+            
+            // Score breakdown
+            if let breakdown = lead.scoreBreakdown {
+                HStack(spacing: AppSpacing.spacing5) {
+                    ScoreBar(label: "Intent", value: breakdown.intent, color: AppColors.scoreHigh)
+                    ScoreBar(label: "Fit", value: breakdown.fit, color: AppColors.accentCyan)
+                    ScoreBar(label: "Urgency", value: breakdown.urgency, color: AppColors.warning)
+                }
+                .padding(.top, AppSpacing.spacing2)
+            }
+        }
+        .padding(AppSpacing.spacing5)
+        .background(AppColors.warning.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: AppRadius.md))
+        .overlay(
+            RoundedRectangle(cornerRadius: AppRadius.md)
+                .stroke(AppColors.warning.opacity(0.2), lineWidth: 1)
+        )
+    }
+    
+    // MARK: - Key Snippet
+    
+    private var snippetSection: some View {
+        Group {
+            if let snippet = lead.matchingSnippet {
+                VStack(alignment: .leading, spacing: AppSpacing.spacing3) {
+                    HStack {
+                        Image(systemName: "text.quote")
+                            .foregroundColor(AppColors.accentCyan)
+                        Text("Key Snippet")
+                            .font(AppTypography.heading3)
+                            .foregroundColor(AppColors.textPrimary)
+                    }
+                    
+                    HStack(alignment: .top, spacing: 8) {
+                        Rectangle()
+                            .fill(AppColors.accentCyan)
+                            .frame(width: 3)
+                        
+                        Text("\"\(snippet)\"")
+                            .font(.system(size: 15, weight: .regular, design: .serif))
+                            .italic()
+                            .foregroundColor(AppColors.textPrimary)
+                            .lineSpacing(4)
+                    }
+                }
+                .padding(AppSpacing.spacing5)
+                .background(AppColors.accentCyan.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: AppRadius.md))
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppRadius.md)
+                        .stroke(AppColors.accentCyan.opacity(0.2), lineWidth: 1)
+                )
+            }
+        }
+    }
+    
+    // MARK: - How To Approach
+    
+    private var approachSection: some View {
+        Group {
+            if let approach = lead.suggestedApproach {
+                VStack(alignment: .leading, spacing: AppSpacing.spacing3) {
+                    HStack {
+                        Image(systemName: "lightbulb.fill")
+                            .foregroundColor(AppColors.success)
+                        Text("Suggested Approach")
+                            .font(AppTypography.heading3)
+                            .foregroundColor(AppColors.textPrimary)
+                    }
+                    
+                    Text(approach)
                         .font(AppTypography.bodyMedium)
+                        .foregroundColor(AppColors.textSecondary)
+                        .lineSpacing(4)
+                }
+                .padding(AppSpacing.spacing5)
+                .background(AppColors.success.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: AppRadius.md))
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppRadius.md)
+                        .stroke(AppColors.success.opacity(0.2), lineWidth: 1)
+                )
+            }
+        }
+    }
+    
+    // MARK: - Original Post
+    
+    private var contentSection: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.spacing3) {
+            HStack {
+                Text("Original Post")
+                    .font(AppTypography.heading3)
+                    .foregroundColor(AppColors.textPrimary)
+                
+                Spacer()
+                
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("r/\(lead.subreddit)")
+                        .font(AppTypography.bodySmall)
                         .foregroundColor(AppColors.primary400)
-                    
-                    Text(lead.postedAt.timeAgoDisplay())
-                        .font(AppTypography.bodySmall)
-                        .foregroundColor(AppColors.textTertiary)
-                    
-                    Text("by u/\(lead.author)")
-                        .font(AppTypography.bodySmall)
+                    Text("by u/\(lead.author) · \(lead.postedAt.timeAgoDisplay())")
+                        .font(AppTypography.caption)
                         .foregroundColor(AppColors.textTertiary)
                 }
             }
             
-            if let breakdown = lead.scoreBreakdown {
-                ScoreBreakdownView(breakdown: breakdown)
-            }
-        }
-        .padding(AppSpacing.spacing5)
-        .background(AppColors.bg700)
-        .clipShape(RoundedRectangle(cornerRadius: AppRadius.md))
-    }
-    
-    // MARK: - Content Section
-    
-    private var contentSection: some View {
-        VStack(alignment: .leading, spacing: AppSpacing.spacing3) {
             Text(lead.title)
                 .font(AppTypography.heading2)
                 .foregroundColor(AppColors.textPrimary)
@@ -94,7 +201,6 @@ struct LeadDetailScreen: View {
                     .lineSpacing(4)
             }
             
-            // Engagement stats
             HStack(spacing: AppSpacing.spacing6) {
                 Label("\(lead.upvotes) upvotes", systemImage: "arrow.up")
                 Label("\(lead.commentCount) comments", systemImage: "bubble.right")
@@ -107,10 +213,15 @@ struct LeadDetailScreen: View {
         .clipShape(RoundedRectangle(cornerRadius: AppRadius.md))
     }
     
-    // MARK: - Action Section
+    // MARK: - Actions
     
     private var actionSection: some View {
         VStack(spacing: AppSpacing.spacing3) {
+            // Primary CTA — open Reddit to engage
+            PrimaryButton("Open in Reddit", icon: "safari") {
+                openRedditPost()
+            }
+            
             PrimaryButton("Generate AI Reply", icon: "sparkles") {
                 showReplySheet = true
             }
@@ -142,7 +253,38 @@ struct LeadDetailScreen: View {
     }
 }
 
-/// Sheet for AI reply suggestions — wired to Edge Function
+// MARK: - Score Bar Component
+
+struct ScoreBar: View {
+    let label: String
+    let value: Int
+    let color: Color
+    
+    var body: some View {
+        VStack(spacing: 4) {
+            Text("\(value)")
+                .font(.system(size: 18, weight: .bold, design: .rounded))
+                .foregroundColor(color)
+            
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(color.opacity(0.15))
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(color)
+                        .frame(width: geo.size.width * CGFloat(value) / 100)
+                }
+            }
+            .frame(height: 6)
+            
+            Text(label)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(AppColors.textTertiary)
+        }
+    }
+}
+
+/// Sheet for AI reply suggestions
 struct ReplySheetView: View {
     let lead: Lead
     @Environment(\.dismiss) private var dismiss
@@ -255,11 +397,10 @@ struct ReplySheetView: View {
             let reply = try await replyRepo.generateReply(
                 leadId: lead.id,
                 tone: selectedTone,
-                context: "" // Will use user's product description from settings
+                context: ""
             )
             generatedReply = reply.suggestion
         } catch {
-            // Fallback to local templates if Edge Function fails
             let replies: [ReplyTone: String] = [
                 .professional: "Hi there! I noticed you're looking for a solution to \(lead.title.prefix(50))... I've been working on something that might help. Would love to share more details if you're interested.",
                 .casual: "Hey! Saw your post and thought I could help out. I've built something that handles exactly this. Happy to chat more about it if you want! 🚀",

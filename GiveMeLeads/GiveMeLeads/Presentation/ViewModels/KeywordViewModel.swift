@@ -1,20 +1,26 @@
 import Foundation
 import Observation
 
-/// ViewModel for keyword/profile management
+/// ViewModel for profile management and scanning
 @Observable
 final class KeywordViewModel {
     var profiles: [TrackingProfile] = []
     var isLoading = false
     var error: String?
-    var showAddProfile = false
     
-    // New profile form
+    // Scanning state
+    var isScanningProfile: UUID?
+    var scanMessage: String?
+    var lastScannedProfileId: UUID?
+    
+    // Kept for compatibility but no longer used by AddProfileSheet
+    var newKeywordText = ""
+    var showAddProfile = false
     var newProfileName = ""
     var newProfileSubreddits = ""
-    var newKeywordText = ""
     
     private let keywordRepo: KeywordRepositoryProtocol
+    private let redditSearch = RedditSearchService()
     
     init(keywordRepo: KeywordRepositoryProtocol = KeywordRepository()) {
         self.keywordRepo = keywordRepo
@@ -42,7 +48,128 @@ final class KeywordViewModel {
         isLoading = false
     }
     
-    /// Create a new tracking profile
+    /// Scan Reddit for a specific profile
+    func scanProfile(_ profile: TrackingProfile) async {
+        guard isScanningProfile == nil else { return }
+        
+        isScanningProfile = profile.id
+        lastScannedProfileId = profile.id
+        scanMessage = nil
+        error = nil
+        
+        do {
+            let keywords = profile.keywords?.map(\.keyword) ?? []
+            
+            guard !keywords.isEmpty else {
+                error = "This profile has no keywords. Edit it to add some."
+                isScanningProfile = nil
+                return
+            }
+            
+            guard let userId = try? await SupabaseManager.shared.client.auth.session.user.id else {
+                error = "Session expired. Please sign in again."
+                isScanningProfile = nil
+                return
+            }
+            
+            let subreddits = profile.subreddits.isEmpty ? ["all"] : profile.subreddits
+            
+            // Search Reddit
+            let posts = try await redditSearch.search(
+                keywords: keywords,
+                subreddits: subreddits,
+                limit: 25
+            )
+            
+            // Score and save
+            let productDesc = keywords.joined(separator: " ")
+            var totalFound = 0
+            
+            for post in posts {
+                guard let intel = redditSearch.analyzePost(
+                    post,
+                    keywords: keywords,
+                    productDescription: productDesc
+                ) else { continue }
+                
+                let newLead = NewLead(
+                    userId: userId,
+                    profileId: profile.id,
+                    keywordId: nil,
+                    redditPostId: "t3_\(post.id)",
+                    subreddit: post.subreddit,
+                    author: post.author,
+                    title: post.title,
+                    body: post.selftext,
+                    url: "https://reddit.com\(post.permalink)",
+                    score: intel.score,
+                    scoreBreakdown: intel.breakdown,
+                    upvotes: post.ups,
+                    commentCount: post.numComments,
+                    status: .new,
+                    postedAt: Date(timeIntervalSince1970: post.createdUtc),
+                    discoveredAt: Date(),
+                    relevanceInsight: intel.relevanceInsight,
+                    matchingSnippet: intel.matchingSnippet,
+                    suggestedApproach: intel.suggestedApproach
+                )
+                
+                do {
+                    try await SupabaseManager.shared.client
+                        .from("leads")
+                        .insert(newLead)
+                        .execute()
+                    totalFound += 1
+                } catch {
+                    continue // Skip duplicates
+                }
+            }
+            
+            scanMessage = totalFound > 0
+                ? "🎯 \(totalFound) new lead\(totalFound == 1 ? "" : "s") found!"
+                : "No new leads right now. Searched \(posts.count) posts."
+            
+        } catch {
+            self.error = "Scan failed: \(error.localizedDescription)"
+        }
+        
+        isScanningProfile = nil
+    }
+    
+    /// Toggle profile active state
+    func toggleProfile(_ profileId: UUID) async {
+        guard let idx = profiles.firstIndex(where: { $0.id == profileId }) else { return }
+        
+        let updated = TrackingProfile(
+            id: profiles[idx].id,
+            userId: profiles[idx].userId,
+            name: profiles[idx].name,
+            subreddits: profiles[idx].subreddits,
+            isActive: !profiles[idx].isActive,
+            createdAt: profiles[idx].createdAt,
+            updatedAt: profiles[idx].updatedAt,
+            keywords: profiles[idx].keywords
+        )
+        profiles[idx] = updated
+        
+        do {
+            try await keywordRepo.updateProfile(updated)
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+    
+    /// Delete profile
+    func deleteProfile(_ profileId: UUID) async {
+        do {
+            try await keywordRepo.deleteProfile(id: profileId)
+            profiles.removeAll { $0.id == profileId }
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+    
+    /// Create a new tracking profile (legacy — kept for compatibility)
     func createProfile() async {
         guard !newProfileName.trimmingCharacters(in: .whitespaces).isEmpty else {
             error = "Profile name is required"
@@ -86,18 +213,16 @@ final class KeywordViewModel {
             )
             
             if let idx = profiles.firstIndex(where: { $0.id == profileId }) {
-                var updated = profiles[idx]
-                var keywords = updated.keywords ?? []
+                var keywords = profiles[idx].keywords ?? []
                 keywords.append(keyword)
-                // Since TrackingProfile is a struct, we need to reconstruct
                 profiles[idx] = TrackingProfile(
-                    id: updated.id,
-                    userId: updated.userId,
-                    name: updated.name,
-                    subreddits: updated.subreddits,
-                    isActive: updated.isActive,
-                    createdAt: updated.createdAt,
-                    updatedAt: updated.updatedAt,
+                    id: profiles[idx].id,
+                    userId: profiles[idx].userId,
+                    name: profiles[idx].name,
+                    subreddits: profiles[idx].subreddits,
+                    isActive: profiles[idx].isActive,
+                    createdAt: profiles[idx].createdAt,
+                    updatedAt: profiles[idx].updatedAt,
                     keywords: keywords
                 )
             }
@@ -126,40 +251,6 @@ final class KeywordViewModel {
                     keywords: keywords
                 )
             }
-        } catch {
-            self.error = error.localizedDescription
-        }
-    }
-    
-    /// Toggle profile active state
-    func toggleProfile(_ profileId: UUID) async {
-        guard let idx = profiles.firstIndex(where: { $0.id == profileId }) else { return }
-        
-        var updated = profiles[idx]
-        updated = TrackingProfile(
-            id: updated.id,
-            userId: updated.userId,
-            name: updated.name,
-            subreddits: updated.subreddits,
-            isActive: !updated.isActive,
-            createdAt: updated.createdAt,
-            updatedAt: updated.updatedAt,
-            keywords: updated.keywords
-        )
-        profiles[idx] = updated
-        
-        do {
-            try await keywordRepo.updateProfile(updated)
-        } catch {
-            self.error = error.localizedDescription
-        }
-    }
-    
-    /// Delete profile
-    func deleteProfile(_ profileId: UUID) async {
-        do {
-            try await keywordRepo.deleteProfile(id: profileId)
-            profiles.removeAll { $0.id == profileId }
         } catch {
             self.error = error.localizedDescription
         }

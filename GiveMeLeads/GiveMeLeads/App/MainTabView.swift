@@ -15,9 +15,9 @@ struct MainTabView: View {
             
             KeywordListScreen()
                 .tabItem {
-                    Label(AppTab.keywords.title, systemImage: AppTab.keywords.icon)
+                    Label(AppTab.profiles.title, systemImage: AppTab.profiles.icon)
                 }
-                .tag(AppTab.keywords)
+                .tag(AppTab.profiles)
             
             SavedLeadsScreen()
                 .tabItem {
@@ -34,6 +34,11 @@ struct MainTabView: View {
         .tint(AppColors.primary500)
         .fullScreenCover(isPresented: $router.showPaywall) {
             PaywallScreen()
+        }
+        .fullScreenCover(isPresented: $router.showProductSetup) {
+            ProductSetupScreen(isModal: true) {
+                router.setupComplete()
+            }
         }
     }
 }

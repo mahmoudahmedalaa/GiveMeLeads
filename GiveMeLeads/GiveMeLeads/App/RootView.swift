@@ -10,6 +10,10 @@ struct RootView: View {
                 SplashView()
             case .unauthenticated:
                 WelcomeScreen()
+            case .needsSetup:
+                ProductSetupScreen(isModal: false) {
+                    router.setupComplete()
+                }
             case .authenticated:
                 MainTabView()
             }
