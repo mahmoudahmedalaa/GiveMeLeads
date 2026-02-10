@@ -15,6 +15,11 @@ struct RootView: View {
             }
         }
         .animation(.easeInOut(duration: 0.3), value: router.authState)
+        .task {
+            // Check for existing session on app launch
+            let authVM = AuthViewModel(router: router)
+            await authVM.checkSession()
+        }
     }
 }
 
