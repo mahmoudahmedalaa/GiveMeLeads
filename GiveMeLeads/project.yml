@@ -41,6 +41,7 @@ targets:
       base:
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: 2S42RLH67Y
+        INFOPLIST_FILE: GiveMeLeads/Info.plist
     entitlements:
       path: GiveMeLeads/GiveMeLeads.entitlements
       properties:

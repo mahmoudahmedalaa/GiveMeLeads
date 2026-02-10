@@ -9,6 +9,13 @@ struct GiveMeLeadsApp: App {
             RootView()
                 .environment(appRouter)
                 .preferredColorScheme(.dark)
+                .onOpenURL { url in
+                    // Handle magic link deep link callback
+                    Task {
+                        let authVM = AuthViewModel(router: appRouter)
+                        await authVM.handleDeepLink(url: url)
+                    }
+                }
         }
     }
 }

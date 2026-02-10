@@ -16,7 +16,7 @@ struct WelcomeScreen: View {
             )
             .ignoresSafeArea()
             
-            VStack(spacing: AppSpacing.spacing8) {
+            VStack(spacing: AppSpacing.spacing6) {
                 Spacer()
                 
                 // Logo & branding
@@ -52,8 +52,9 @@ struct WelcomeScreen: View {
                 
                 Spacer()
                 
-                // Sign in with Apple
+                // Auth Section
                 VStack(spacing: AppSpacing.spacing4) {
+                    // Sign in with Apple
                     SignInWithAppleButton(.signIn) { request in
                         request.requestedScopes = [.email, .fullName]
                     } onCompletion: { result in
@@ -65,15 +66,79 @@ struct WelcomeScreen: View {
                     .frame(height: 52)
                     .cornerRadius(AppSpacing.spacing3)
                     
+                    // Divider
+                    HStack {
+                        Rectangle()
+                            .fill(AppColors.textTertiary.opacity(0.3))
+                            .frame(height: 1)
+                        Text("or")
+                            .font(AppTypography.bodySmall)
+                            .foregroundColor(AppColors.textTertiary)
+                        Rectangle()
+                            .fill(AppColors.textTertiary.opacity(0.3))
+                            .frame(height: 1)
+                    }
+                    
+                    // Email magic link
+                    if let vm = viewModel {
+                        if vm.magicLinkSent {
+                            // Success state
+                            HStack(spacing: AppSpacing.spacing2) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(AppColors.success)
+                                Text("Check your email for the sign-in link!")
+                                    .font(AppTypography.bodyMedium)
+                                    .foregroundColor(AppColors.success)
+                            }
+                            .padding(.vertical, AppSpacing.spacing3)
+                            
+                            Button("Use a different email") {
+                                vm.magicLinkSent = false
+                                vm.emailText = ""
+                            }
+                            .font(AppTypography.bodySmall)
+                            .foregroundColor(AppColors.primary400)
+                        } else {
+                            // Email input
+                            HStack(spacing: AppSpacing.spacing2) {
+                                TextField("Enter your email", text: Binding(
+                                    get: { vm.emailText },
+                                    set: { vm.emailText = $0 }
+                                ))
+                                .textContentType(.emailAddress)
+                                .keyboardType(.emailAddress)
+                                .autocapitalization(.none)
+                                .disableAutocorrection(true)
+                                .font(AppTypography.bodyMedium)
+                                .foregroundColor(AppColors.textPrimary)
+                                .padding(.horizontal, AppSpacing.spacing4)
+                                .padding(.vertical, AppSpacing.spacing3)
+                                .background(AppColors.bg700)
+                                .cornerRadius(AppSpacing.spacing3)
+                                
+                                Button(action: {
+                                    Task { await vm.sendMagicLink() }
+                                }) {
+                                    if vm.isLoading {
+                                        ProgressView()
+                                            .tint(.white)
+                                            .frame(width: 52, height: 48)
+                                    } else {
+                                        Image(systemName: "arrow.right.circle.fill")
+                                            .font(.system(size: 32))
+                                            .foregroundStyle(AppColors.primaryGradient)
+                                            .frame(width: 52, height: 48)
+                                    }
+                                }
+                                .disabled(vm.isLoading)
+                            }
+                        }
+                    }
+                    
                     if let error = viewModel?.error {
                         Text(error)
                             .font(AppTypography.caption)
                             .foregroundColor(AppColors.error)
-                    }
-                    
-                    if viewModel?.isLoading == true {
-                        ProgressView()
-                            .tint(AppColors.primary500)
                     }
                     
                     Text("By continuing, you agree to our Terms and Privacy Policy")
@@ -83,17 +148,12 @@ struct WelcomeScreen: View {
                 }
                 .opacity(animateContent ? 1 : 0)
                 .offset(y: animateContent ? 0 : 30)
-                .padding(.bottom, AppSpacing.spacing8)
+                .padding(.bottom, AppSpacing.spacing6)
             }
             .padding(.horizontal, AppSpacing.spacing6)
         }
         .onAppear {
             viewModel = AuthViewModel(router: router)
-            
-            // Check existing session first
-            Task {
-                await viewModel?.checkSession()
-            }
             
             withAnimation(.spring(response: 0.8, dampingFraction: 0.7).delay(0.2)) {
                 animateContent = true

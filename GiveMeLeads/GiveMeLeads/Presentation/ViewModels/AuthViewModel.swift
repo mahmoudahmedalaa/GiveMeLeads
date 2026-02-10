@@ -7,6 +7,8 @@ import Observation
 final class AuthViewModel {
     var isLoading = false
     var error: String?
+    var magicLinkSent = false
+    var emailText = ""
     
     private let authRepo: AuthRepositoryProtocol
     private let router: AppRouter
@@ -18,9 +20,6 @@ final class AuthViewModel {
     
     /// Check for existing session on app launch
     func checkSession() async {
-        isLoading = true
-        defer { isLoading = false }
-        
         do {
             if let _ = try await authRepo.getCurrentSession() {
                 router.handleAuthStateChange(isAuthenticated: true)
@@ -29,6 +28,39 @@ final class AuthViewModel {
             }
         } catch {
             router.handleAuthStateChange(isAuthenticated: false)
+        }
+    }
+    
+    /// Send magic link email
+    func sendMagicLink() async {
+        let email = emailText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !email.isEmpty else {
+            error = "Please enter your email"
+            return
+        }
+        
+        isLoading = true
+        error = nil
+        defer { isLoading = false }
+        
+        do {
+            try await authRepo.sendMagicLink(email: email)
+            magicLinkSent = true
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+    
+    /// Handle deep link callback from magic link
+    func handleDeepLink(url: URL) async {
+        isLoading = true
+        defer { isLoading = false }
+        
+        do {
+            try await SupabaseManager.shared.client.auth.session(from: url)
+            router.handleAuthStateChange(isAuthenticated: true)
+        } catch {
+            self.error = "Sign in failed: \(error.localizedDescription)"
         }
     }
     

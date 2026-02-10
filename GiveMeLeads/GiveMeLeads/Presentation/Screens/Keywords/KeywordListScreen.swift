@@ -1,8 +1,7 @@
 import SwiftUI
 
 struct KeywordListScreen: View {
-    @State private var profiles = [TrackingProfile.sample]
-    @State private var showAddProfile = false
+    @State private var viewModel = KeywordViewModel()
     
     var body: some View {
         NavigationStack {
@@ -10,13 +9,16 @@ struct KeywordListScreen: View {
                 AppColors.background
                     .ignoresSafeArea()
                 
-                if profiles.isEmpty {
+                if viewModel.isLoading {
+                    ProgressView()
+                        .tint(AppColors.primary400)
+                } else if viewModel.profiles.isEmpty {
                     EmptyStateView(
                         icon: "magnifyingglass",
                         title: "No Keywords",
                         message: "Add keyword profiles to start\ntracking leads on Reddit",
                         actionTitle: "Create Profile",
-                        action: { showAddProfile = true }
+                        action: { viewModel.showAddProfile = true }
                     )
                 } else {
                     profilesList
@@ -26,15 +28,23 @@ struct KeywordListScreen: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: { showAddProfile = true }) {
-                        Image(systemName: "plus")
-                            .foregroundColor(AppColors.primary400)
+                    if viewModel.canAddProfile {
+                        Button(action: { viewModel.showAddProfile = true }) {
+                            Image(systemName: "plus")
+                                .foregroundColor(AppColors.primary400)
+                        }
                     }
                 }
             }
-            .sheet(isPresented: $showAddProfile) {
-                Text("Add Profile Sheet") // TODO: AddProfileSheet
+            .sheet(isPresented: Binding(
+                get: { viewModel.showAddProfile },
+                set: { viewModel.showAddProfile = $0 }
+            )) {
+                AddProfileSheet(viewModel: viewModel)
                     .presentationDetents([.medium])
+            }
+            .task {
+                await viewModel.fetchProfiles()
             }
         }
     }
@@ -42,12 +52,12 @@ struct KeywordListScreen: View {
     private var profilesList: some View {
         ScrollView {
             LazyVStack(spacing: AppSpacing.spacing4) {
-                ForEach(profiles) { profile in
+                ForEach(viewModel.profiles) { profile in
                     profileCard(profile)
                 }
                 
                 // Counter
-                Text("\(totalKeywords)/\(AppConfig.maxKeywordsPerProfile * AppConfig.maxProfiles) keywords · \(profiles.count)/\(AppConfig.maxProfiles) profiles")
+                Text("\(viewModel.totalKeywords)/\(AppConfig.maxKeywordsPerProfile * AppConfig.maxProfiles) keywords · \(viewModel.profiles.count)/\(AppConfig.maxProfiles) profiles")
                     .font(AppTypography.bodySmall)
                     .foregroundColor(AppColors.textTertiary)
                     .padding(.top, AppSpacing.spacing4)
@@ -67,34 +77,78 @@ struct KeywordListScreen: View {
                 
                 Spacer()
                 
-                Toggle("", isOn: .constant(profile.isActive))
-                    .labelsHidden()
-                    .tint(AppColors.primary500)
+                Button(action: {
+                    Task { await viewModel.toggleProfile(profile.id) }
+                }) {
+                    Image(systemName: profile.isActive ? "checkmark.circle.fill" : "circle")
+                        .foregroundColor(profile.isActive ? AppColors.success : AppColors.textTertiary)
+                        .font(.system(size: 22))
+                }
+                
+                Button(action: {
+                    Task { await viewModel.deleteProfile(profile.id) }
+                }) {
+                    Image(systemName: "trash")
+                        .foregroundColor(AppColors.error.opacity(0.7))
+                        .font(.system(size: 14))
+                }
             }
             
             // Keywords
-            FlowLayout(spacing: AppSpacing.spacing2) {
-                ForEach(profile.keywords ?? []) { keyword in
-                    ChipView(keyword.keyword, onDelete: {
-                        // TODO: Delete keyword
-                    })
+            if let keywords = profile.keywords, !keywords.isEmpty {
+                FlowLayout(spacing: AppSpacing.spacing2) {
+                    ForEach(keywords) { keyword in
+                        ChipView(keyword.keyword, onDelete: {
+                            Task { await viewModel.deleteKeyword(keyword, from: profile.id) }
+                        })
+                    }
                 }
             }
             
-            // Subreddits
+            // Add keyword input
             HStack(spacing: AppSpacing.spacing2) {
-                ForEach(profile.subreddits, id: \.self) { sub in
-                    ChipView("r/\(sub)", style: .subreddit)
+                TextField("Add keyword...", text: Binding(
+                    get: { viewModel.newKeywordText },
+                    set: { viewModel.newKeywordText = $0 }
+                ))
+                .font(AppTypography.bodySmall)
+                .foregroundColor(AppColors.textPrimary)
+                .padding(.horizontal, AppSpacing.spacing3)
+                .padding(.vertical, AppSpacing.spacing2)
+                .background(AppColors.background)
+                .cornerRadius(AppRadius.sm)
+                .onSubmit {
+                    Task { await viewModel.addKeyword(to: profile.id) }
                 }
+                
+                Button(action: {
+                    Task { await viewModel.addKeyword(to: profile.id) }
+                }) {
+                    Image(systemName: "plus.circle.fill")
+                        .foregroundStyle(AppColors.primaryGradient)
+                        .font(.system(size: 24))
+                }
+                .disabled(viewModel.newKeywordText.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            
+            // Subreddits
+            if !profile.subreddits.isEmpty {
+                HStack(spacing: AppSpacing.spacing2) {
+                    ForEach(profile.subreddits, id: \.self) { sub in
+                        ChipView("r/\(sub)", style: .subreddit)
+                    }
+                }
+            }
+            
+            if let error = viewModel.error {
+                Text(error)
+                    .font(AppTypography.caption)
+                    .foregroundColor(AppColors.error)
             }
         }
         .padding(AppSpacing.spacing5)
         .background(AppColors.bg700)
         .clipShape(RoundedRectangle(cornerRadius: AppRadius.md))
-    }
-    
-    private var totalKeywords: Int {
-        profiles.reduce(0) { $0 + ($1.keywords?.count ?? 0) }
     }
 }
 

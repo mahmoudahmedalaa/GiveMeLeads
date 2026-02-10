@@ -4,6 +4,8 @@ import Foundation
 protocol AuthRepositoryProtocol {
     /// Sign in with Apple using identity token
     func signInWithApple(idToken: String, nonce: String) async throws -> UserProfile
+    /// Send a magic link to the given email
+    func sendMagicLink(email: String) async throws
     /// Get current session, nil if not authenticated
     func getCurrentSession() async throws -> UserProfile?
     /// Sign out the current user

@@ -35,7 +35,26 @@ struct SavedLeadsScreen: View {
         ScrollView {
             LazyVStack(spacing: AppSpacing.spacing3) {
                 ForEach(viewModel.savedLeads) { lead in
-                    savedLeadRow(lead)
+                    NavigationLink(destination: LeadDetailScreen(
+                        lead: lead,
+                        onStatusChange: { newStatus in
+                            Task {
+                                switch newStatus {
+                                case .contacted:
+                                    await viewModel.markContacted(lead)
+                                case .dismissed:
+                                    await viewModel.dismissLead(lead)
+                                default:
+                                    break
+                                }
+                                // Refresh saved leads
+                                await viewModel.fetchSavedLeads()
+                            }
+                        }
+                    )) {
+                        savedLeadRow(lead)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
             .padding(.horizontal, AppSpacing.spacing4)

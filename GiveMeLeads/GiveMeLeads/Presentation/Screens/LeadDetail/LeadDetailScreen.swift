@@ -142,13 +142,16 @@ struct LeadDetailScreen: View {
     }
 }
 
-/// Sheet for AI reply suggestions
+/// Sheet for AI reply suggestions — wired to Edge Function
 struct ReplySheetView: View {
     let lead: Lead
     @Environment(\.dismiss) private var dismiss
     @State private var selectedTone: ReplyTone = .professional
     @State private var generatedReply = ""
     @State private var isGenerating = false
+    @State private var error: String?
+    
+    private let replyRepo = AIReplyRepository()
     
     var body: some View {
         NavigationStack {
@@ -223,6 +226,12 @@ struct ReplySheetView: View {
                         }
                     }
                     
+                    if let error {
+                        Text(error)
+                            .font(AppTypography.caption)
+                            .foregroundColor(AppColors.error)
+                    }
+                    
                     Spacer()
                 }
                 .padding(AppSpacing.spacing5)
@@ -240,17 +249,26 @@ struct ReplySheetView: View {
     
     private func generateReply() async {
         isGenerating = true
-        // TODO: Call AI reply generation edge function
-        // For now, use a placeholder
-        try? await Task.sleep(nanoseconds: 1_500_000_000)
+        error = nil
         
-        let replies: [ReplyTone: String] = [
-            .professional: "Hi there! I noticed you're looking for a solution to \(lead.title.prefix(50))... I've been working on something that might help. Would love to share more details if you're interested.",
-            .casual: "Hey! Saw your post and thought I could help out. I've built something that handles exactly this. Happy to chat more about it if you want! 🚀",
-            .helpful: "Great question! There are several approaches you could take here. Based on my experience, I'd recommend looking into tools that specifically address \(lead.title.prefix(30))... Let me know if you'd like more specific guidance."
-        ]
+        do {
+            let reply = try await replyRepo.generateReply(
+                leadId: lead.id,
+                tone: selectedTone,
+                context: "" // Will use user's product description from settings
+            )
+            generatedReply = reply.suggestion
+        } catch {
+            // Fallback to local templates if Edge Function fails
+            let replies: [ReplyTone: String] = [
+                .professional: "Hi there! I noticed you're looking for a solution to \(lead.title.prefix(50))... I've been working on something that might help. Would love to share more details if you're interested.",
+                .casual: "Hey! Saw your post and thought I could help out. I've built something that handles exactly this. Happy to chat more about it if you want! 🚀",
+                .helpful: "Great question! There are several approaches you could take here. Based on my experience, I'd recommend looking into tools that specifically address \(lead.title.prefix(30))... Let me know if you'd like more specific guidance."
+            ]
+            generatedReply = replies[selectedTone] ?? ""
+            self.error = "Used offline template (Edge Function unavailable)"
+        }
         
-        generatedReply = replies[selectedTone] ?? ""
         isGenerating = false
     }
 }
