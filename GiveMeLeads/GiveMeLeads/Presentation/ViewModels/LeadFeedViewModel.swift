@@ -2,15 +2,7 @@ import Foundation
 import Observation
 import Supabase
 
-/// Edge Function scan response
-private struct ScanResponse: Codable {
-    let message: String?
-    let leads_found: Int?
-    let profiles_scanned: Int?
-    let error: String?
-}
-
-/// Profile-aware lead feed — server-side scanning via Edge Function, auto-monitoring via cron
+/// Profile-aware lead feed — client-side scanning via Reddit JSON API
 @Observable
 final class LeadFeedViewModel {
     var leads: [Lead] = []
@@ -21,12 +13,14 @@ final class LeadFeedViewModel {
     var isRefreshing = false
     var isScanning = false
     var scanMessage: String?
+    var scanProgress: String?
     var error: String?
     var selectedLead: Lead?
     var hasLoadedOnce = false
     
     private let leadRepo: LeadRepositoryProtocol
     private let keywordRepo: KeywordRepositoryProtocol
+    private let redditSearch = RedditSearchService()
     private var currentOffset = 0
     private let pageSize = 20
     
@@ -128,42 +122,141 @@ final class LeadFeedViewModel {
         }
     }
     
-    // MARK: - Scanning (calls server-side Edge Function)
+    // MARK: - Scanning (client-side — Reddit blocks cloud IPs)
     
-    /// Trigger a server-side scan via Edge Function
+    /// Scan Reddit from the device and save leads to Supabase
     func scanForNewLeads() async {
-        guard selectedProfile != nil else {
+        guard let profile = selectedProfile else {
             error = "No profile selected. Go to Profiles tab to create one."
+            return
+        }
+        
+        let keywords = profile.keywords?.map(\.keyword) ?? []
+        guard !keywords.isEmpty else {
+            error = "This profile has no keywords. Edit it to add some."
             return
         }
         
         isScanning = true
         scanMessage = nil
+        scanProgress = "Searching Reddit..."
         error = nil
         
         do {
-            let session = try await SupabaseManager.shared.client.auth.session
-            let token = session.accessToken
+            guard let userId = try? await SupabaseManager.shared.client.auth.session.user.id else {
+                error = "Session expired. Please sign in again."
+                isScanning = false
+                return
+            }
             
-            // Call the server-side Edge Function
-            let response: ScanResponse = try await SupabaseManager.shared.client
-                .functions
-                .invoke(
-                    "scan-reddit",
-                    options: .init(
-                        headers: ["Authorization": "Bearer \(token)"]
-                    )
+            let subreddits = profile.subreddits.isEmpty ? ["all"] : profile.subreddits
+            
+            // Search posts
+            scanProgress = "Searching Reddit posts..."
+            let posts = try await redditSearch.search(
+                keywords: keywords,
+                subreddits: subreddits,
+                limit: 25
+            )
+            
+            // Search comments
+            scanProgress = "Searching Reddit comments..."
+            let comments = try await redditSearch.searchComments(
+                keywords: keywords,
+                subreddits: subreddits,
+                limit: 15
+            )
+            
+            scanProgress = "Analyzing \(posts.count) posts + \(comments.count) comments..."
+            let productDesc = keywords.joined(separator: " ")
+            var totalFound = 0
+            
+            // Analyze and save posts
+            for post in posts {
+                guard let intel = redditSearch.analyzePost(
+                    post,
+                    keywords: keywords,
+                    productDescription: productDesc
+                ) else { continue }
+                
+                let newLead = NewLead(
+                    userId: userId,
+                    profileId: profile.id,
+                    keywordId: nil,
+                    redditPostId: "t3_\(post.id)",
+                    subreddit: post.subreddit,
+                    author: post.author,
+                    title: post.title,
+                    body: post.selftext,
+                    url: "https://reddit.com\(post.permalink)",
+                    score: intel.score,
+                    scoreBreakdown: intel.breakdown,
+                    upvotes: post.ups,
+                    commentCount: post.numComments,
+                    status: .new,
+                    postedAt: Date(timeIntervalSince1970: post.createdUtc),
+                    discoveredAt: Date(),
+                    relevanceInsight: intel.relevanceInsight,
+                    matchingSnippet: intel.matchingSnippet,
+                    suggestedApproach: intel.suggestedApproach
                 )
-            
-            if let err = response.error {
-                self.error = err
-            } else {
-                let found = response.leads_found ?? 0
-                if found > 0 {
-                    scanMessage = "🎯 \(found) new lead\(found == 1 ? "" : "s") found!"
-                } else {
-                    scanMessage = "No new leads right now. We'll keep monitoring and notify you when new leads appear."
+                
+                do {
+                    try await SupabaseManager.shared.client
+                        .from("leads")
+                        .insert(newLead)
+                        .execute()
+                    totalFound += 1
+                } catch {
+                    continue // Skip duplicates
                 }
+            }
+            
+            // Analyze and save comments
+            for comment in comments {
+                guard let intel = redditSearch.analyzeComment(
+                    comment,
+                    keywords: keywords,
+                    productDescription: productDesc
+                ) else { continue }
+                
+                let newLead = NewLead(
+                    userId: userId,
+                    profileId: profile.id,
+                    keywordId: nil,
+                    redditPostId: "t1_\(comment.id)",
+                    subreddit: comment.subreddit,
+                    author: comment.author,
+                    title: comment.linkTitle ?? "Reddit Comment",
+                    body: comment.body,
+                    url: "https://reddit.com\(comment.permalink)",
+                    score: intel.score,
+                    scoreBreakdown: intel.breakdown,
+                    upvotes: comment.ups,
+                    commentCount: 0,
+                    status: .new,
+                    postedAt: Date(timeIntervalSince1970: comment.createdUtc),
+                    discoveredAt: Date(),
+                    relevanceInsight: intel.relevanceInsight,
+                    matchingSnippet: intel.matchingSnippet,
+                    suggestedApproach: intel.suggestedApproach
+                )
+                
+                do {
+                    try await SupabaseManager.shared.client
+                        .from("leads")
+                        .insert(newLead)
+                        .execute()
+                    totalFound += 1
+                } catch {
+                    continue // Skip duplicates
+                }
+            }
+            
+            if totalFound > 0 {
+                scanMessage = "🎯 \(totalFound) new lead\(totalFound == 1 ? "" : "s") found!"
+            } else {
+                scanMessage = "No new leads right now. Searched \(posts.count) posts + \(comments.count) comments."
             }
             
             await fetchLeadsForSelectedProfile()
@@ -172,6 +265,7 @@ final class LeadFeedViewModel {
             self.error = "Scan failed: \(error.localizedDescription)"
         }
         
+        scanProgress = nil
         isScanning = false
     }
     
