@@ -4,7 +4,7 @@ import Foundation
 enum AppConfig {
     // Supabase
     static let supabaseURL = "https://sgsugbwxkqcdxbulsrgt.supabase.co"
-    static let supabaseAnonKey = "sb_publishable_l2DpNT2iaR8xbnQuVmgt3g_jbWY4SXC"
+    static let supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNnc3VnYnd4a3FjZHhidWxzcmd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA2NTAwOTMsImV4cCI6MjA4NjIyNjA5M30.5AaZkPt1x-KA3AEFOAE3td-4_sDyMbS1NlbV10Tfgz4"
     
     // Reddit
     static let redditClientID = "placeholder"

@@ -26,6 +26,7 @@ final class AIReplyRepository: AIReplyRepositoryProtocol {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue(AppConfig.supabaseAnonKey, forHTTPHeaderField: "apikey")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(body)
         
