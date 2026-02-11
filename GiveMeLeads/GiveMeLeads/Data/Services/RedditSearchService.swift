@@ -191,7 +191,42 @@ final class RedditSearchService {
         return result
     }
     
-    // MARK: - Core Analysis Engine
+    // MARK: - Core Analysis Engine (SALES-FOCUSED)
+    //
+    // DESIGN: This engine scores from a SALES perspective — we want to find people
+    // who would actually BUY or DOWNLOAD a product, not just anyone who happens
+    // to mention a keyword in an unrelated context (e.g., marriage advice ≠ app buyer).
+    //
+    // Three critical gates:
+    // 1. NEGATIVE SIGNALS — immediately penalize personal advice, relationship, emotional posts
+    // 2. PRODUCT CONTEXT — bonus for posts that mention apps/tools/products
+    // 3. PRODUCT INTENT  — high-weight patterns are about PRODUCTS, not life advice
+    
+    /// Words that signal product/app/tool context — their presence means the post could be about discovering products
+    private static let productContextWords: Set<String> = [
+        "app", "apps", "application", "tool", "tools", "software", "program",
+        "download", "install", "subscribe", "subscription", "free", "paid", "premium",
+        "plugin", "extension", "widget", "feature", "features", "update", "version",
+        "iphone", "android", "ios", "play store", "app store", "website", "platform",
+        "saas", "service", "product", "startup", "alternative",
+    ]
+    
+    /// Words that signal the post is about personal life, NOT about products
+    private static let negativeSignalWords: [String] = [
+        // Relationship / personal advice
+        "marriage", "married", "husband", "wife", "spouse", "divorce", "wedding",
+        "relationship", "boyfriend", "girlfriend", "dating", "breakup", "cheating",
+        "toxic", "abuse", "abusive", "argument", "fighting", "ex ",
+        // Emotional support
+        "depressed", "suicidal", "self harm", "panic attack", "trauma",
+        "crying", "scared", "afraid", "lonely", "heartbroken",
+        // Legal / financial personal
+        "custody", "alimony", "restraining order", "police", "arrest", "court",
+        // Generic life advice
+        "rant", "vent", "aita", "am i wrong", "throwaway",
+        // Explicit non-product contexts
+        "meme", "shitpost", "joke",
+    ]
     
     private func analyzeText(
         fullText: String,
@@ -204,63 +239,134 @@ final class RedditSearchService {
         isComment: Bool
     ) -> LeadIntelligence? {
         
-        // ── Intent Detection ──────────────────────────────────
+        // ══════════════════════════════════════════════════════
+        // GATE 1: NEGATIVE SIGNALS — Kill personal advice posts immediately
+        // ══════════════════════════════════════════════════════
+        var negativePenalty = 0
+        for word in Self.negativeSignalWords {
+            if fullText.contains(word) {
+                negativePenalty += 20
+            }
+        }
+        // Hard kill: if 2+ negative signals, this is NOT a product-seeking post
+        if negativePenalty >= 40 { return nil }
+        
+        // ══════════════════════════════════════════════════════
+        // GATE 2: PRODUCT CONTEXT — Does this post mention products/apps/tools?
+        // ══════════════════════════════════════════════════════
+        var productContextScore = 0
+        let textWords = Set(fullText.components(separatedBy: .alphanumerics.inverted).filter { !$0.isEmpty })
+        
+        for word in Self.productContextWords {
+            if word.contains(" ") {
+                if fullText.contains(word) { productContextScore += 15 }
+            } else {
+                if textWords.contains(word) { productContextScore += 15 }
+            }
+        }
+        productContextScore = min(100, productContextScore)
+        
+        // ══════════════════════════════════════════════════════
+        // INTENT DETECTION — Split into PRODUCT-SEEKING vs GENERIC
+        // ══════════════════════════════════════════════════════
         var intentScore = 0
         var detectedIntents: [String] = []
         
-        let intentPatterns: [(pattern: String, label: String, weight: Int)] = [
-            // Direct request signals (highest value)
-            ("looking for", "actively looking for a solution", 25),
-            ("recommend", "asking for recommendations", 25),
-            ("suggestion", "seeking suggestions", 20),
-            ("any good", "evaluating options", 20),
-            ("can anyone", "asking the community for help", 20),
-            ("does anyone know", "seeking specific knowledge", 20),
-            ("anyone tried", "researching options", 18),
-            ("has anyone used", "researching options", 18),
+        // HIGH-VALUE: Product-specific intent (someone looking for a PRODUCT)
+        let productIntentPatterns: [(pattern: String, label: String, weight: Int)] = [
+            // App/tool seeking — GOLD (these people will download/buy)
+            ("recommend.*app", "asking for app recommendations", 35),
+            ("best app", "seeking the best app", 35),
+            ("looking for.*app", "looking for an app", 35),
+            ("any good app", "evaluating apps", 30),
+            ("app for", "searching for app by purpose", 30),
+            ("tool for", "searching for tool by purpose", 30),
+            ("app recommendation", "explicitly wants recommendations", 35),
+            ("what app", "asking about apps", 30),
+            ("which app", "comparing apps", 30),
+            ("suggest.*app", "wants app suggestions", 30),
+            ("anyone use.*app", "researching specific apps", 25),
+            ("anyone tried", "researching options", 25),
+            ("has anyone used", "researching options", 25),
+            ("does anyone know", "seeking specific knowledge", 22),
             
-            // Switching signals (very high value — they WILL pay)
-            ("alternative to", "looking for alternatives", 30),
-            ("switch from", "ready to switch solutions", 30),
-            ("replacing", "actively replacing current tool", 28),
-            ("moving away from", "unhappy with current solution", 28),
-            ("tired of", "frustrated with status quo", 25),
-            ("better than", "comparing solutions", 22),
+            // Switching/alternative signals — HIGHEST conversion potential
+            ("alternative to", "looking for alternatives", 35),
+            ("switch from", "ready to switch solutions", 35),
+            ("replacing", "actively replacing current tool", 30),
+            ("moving away from", "unhappy with current solution", 30),
+            ("better than", "comparing solutions", 25),
             
-            // Need signals
-            ("i need", "has a specific need", 22),
-            ("need help", "needs help with something", 20),
-            ("how do you", "seeking how-to guidance", 15),
-            ("what is the best", "seeking the best option", 22),
-            ("want to try", "open to trying new things", 15),
-            ("looking to", "actively searching", 18),
-            
-            // Wish / desire signals (gold for comments)
-            ("i wish", "expressing an unmet need", 30),
-            ("would be nice", "expressing a desire", 20),
-            ("if only", "expressing frustration with gap", 22),
-            ("is there a", "looking for something specific", 25),
-            ("is there an", "looking for something specific", 25),
+            // Product evaluation
+            ("is it worth", "evaluating purchase", 25),
+            ("worth paying", "considering payment", 30),
+            ("free version", "evaluating pricing", 25),
+            ("premium worth", "considering premium", 30),
+            ("review of", "reading reviews", 20),
         ]
         
-        for pattern in intentPatterns {
+        // MEDIUM-VALUE: Generic but still could be product-related if context matches
+        let genericIntentPatterns: [(pattern: String, label: String, weight: Int)] = [
+            ("looking for", "actively looking for something", 12),
+            ("recommend", "asking for recommendations", 12),
+            ("suggestion", "seeking suggestions", 10),
+            ("any good", "evaluating options", 10),
+            ("can anyone", "asking community for help", 8),
+            ("i need", "has a specific need", 10),
+            ("what is the best", "seeking the best option", 15),
+            ("is there a", "looking for something specific", 12),
+            ("is there an", "looking for something specific", 12),
+            ("how do you", "seeking how-to guidance", 8),
+            ("want to try", "open to trying new things", 8),
+            ("looking to", "actively searching", 10),
+            ("i wish", "expressing an unmet need", 12),
+            ("if only", "expressing frustration with gap", 10),
+        ]
+        
+        // Check product-specific intent first (high weight)
+        for pattern in productIntentPatterns {
+            if pattern.pattern.contains(".*") {
+                // Simple regex-like check: split on .* and check both parts exist
+                let parts = pattern.pattern.components(separatedBy: ".*")
+                if parts.count == 2 {
+                    if let range1 = fullText.range(of: parts[0]),
+                       fullText[range1.upperBound...].contains(parts[1]) {
+                        intentScore = min(100, intentScore + pattern.weight)
+                        detectedIntents.append(pattern.label)
+                    }
+                }
+            } else {
+                if fullText.contains(pattern.pattern) {
+                    intentScore = min(100, intentScore + pattern.weight)
+                    detectedIntents.append(pattern.label)
+                }
+            }
+        }
+        
+        // Check generic intent (lower weight, but still useful with product context)
+        for pattern in genericIntentPatterns {
             if fullText.contains(pattern.pattern) {
                 intentScore = min(100, intentScore + pattern.weight)
                 detectedIntents.append(pattern.label)
             }
         }
-        if fullText.contains("?") { intentScore = min(100, intentScore + 10) }
         
-        // ── Keyword Matching ──────────────────────────────────
+        if fullText.contains("?") { intentScore = min(100, intentScore + 5) }
+        
+        // ══════════════════════════════════════════════════════
+        // KEYWORD MATCHING
+        // ══════════════════════════════════════════════════════
         var matchedKeywords: [String] = []
         for keyword in keywords {
             if fullText.contains(keyword.lowercased()) {
                 matchedKeywords.append(keyword)
-                intentScore = min(100, intentScore + 12)
+                intentScore = min(100, intentScore + 15)
             }
         }
         
-        // ── Urgency Score ─────────────────────────────────────
+        // ══════════════════════════════════════════════════════
+        // URGENCY SCORE
+        // ══════════════════════════════════════════════════════
         let hoursOld = (Date().timeIntervalSince1970 - createdUtc) / 3600
         var urgencyScore: Int
         if hoursOld < 6 { urgencyScore = 100 }
@@ -272,7 +378,9 @@ final class RedditSearchService {
         if numComments > 20 { urgencyScore = min(100, urgencyScore + 15) }
         else if numComments > 5 { urgencyScore = min(100, urgencyScore + 10) }
         
-        // ── Fit Score ─────────────────────────────────────────
+        // ══════════════════════════════════════════════════════
+        // FIT SCORE — How well does this match the product?
+        // ══════════════════════════════════════════════════════
         var fitScore = matchedKeywords.count * 25
         let descWords = productDescription.lowercased()
             .components(separatedBy: .alphanumerics.inverted)
@@ -286,19 +394,35 @@ final class RedditSearchService {
         }
         fitScore = min(100, fitScore)
         
-        // ── Overall Score ─────────────────────────────────────
-        let overall = (intentScore * 4 + urgencyScore * 3 + fitScore * 3) / 10
+        // ══════════════════════════════════════════════════════
+        // OVERALL SCORE — with product-context bonus/penalty
+        // ══════════════════════════════════════════════════════
+        //
+        // Formula: intent (40%) + urgency (20%) + fit (25%) + productContext (15%)
+        // Then subtract negative penalty
+        //
+        var overall = (intentScore * 4 + urgencyScore * 2 + fitScore * 25/10 + productContextScore * 15/10) / 10
         
-        // Quality gate — only return leads worth showing
-        guard overall >= 20 else { return nil }
+        // Apply negative penalty
+        overall = max(0, overall - negativePenalty)
+        
+        // HARD GATE: If NO product context AND NO keyword match AND score is just from
+        // generic intent patterns, this is probably a personal advice post — reject.
+        if productContextScore == 0 && matchedKeywords.isEmpty && intentScore < 40 {
+            return nil
+        }
+        
+        // Quality gate — raised to 30 (from 20) for better signal-to-noise
+        guard overall >= 30 else { return nil }
         
         let breakdown = ScoreBreakdown(intent: intentScore, urgency: urgencyScore, fit: fitScore)
         
         // ── Extract Matching Snippet ──────────────────────────
+        let allPatterns = productIntentPatterns.map(\.pattern) + genericIntentPatterns.map(\.pattern)
         let snippet = extractSnippet(
             from: displayText,
             matchedKeywords: matchedKeywords,
-            intentPatterns: intentPatterns.map(\.pattern)
+            intentPatterns: allPatterns
         )
         
         // ── Generate Relevance Insight ────────────────────────

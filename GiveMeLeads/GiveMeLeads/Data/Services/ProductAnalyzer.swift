@@ -5,9 +5,10 @@ import NaturalLanguage
 /// from a user's product description using Apple's NaturalLanguage framework.
 ///
 /// DESIGN PRINCIPLES:
-/// 1. Subreddits should be WHERE YOUR POTENTIAL USERS hang out, NOT developer subreddits
-/// 2. Keywords should be SEARCH INTENT phrases — what someone would type when looking for your product
-/// 3. Categories must match ONLY on explicit domain words, not generic terms like "app" or "mobile"
+/// 1. Subreddits must be WHERE PEOPLE DISCOVER AND DISCUSS PRODUCTS/APPS — NOT lifestyle/community subs
+/// 2. Keywords must be PRODUCT-SEARCH phrases — "best quran app", "recommend quran app", not just "quran"
+/// 3. Categories match ONLY on explicit domain words, never on generic terms
+/// 4. SALES MINDSET: every subreddit must answer "would someone here BUY my product?"
 enum ProductAnalyzer {
     
     struct AnalysisResult {
@@ -50,79 +51,85 @@ enum ProductAnalyzer {
         "application", "applications", "system", "systems",
     ]
     
-    // MARK: - Subreddit Map — USER-FACING communities only
-    // These are subreddits where POTENTIAL CUSTOMERS hang out, NOT developer subreddits.
-    // Developer tools subreddits (FlutterDev, SwiftUI, iOSProgramming) are NEVER suggested
-    // because we're looking for people who WANT the product, not people who BUILD products.
+    // MARK: - Subreddit Map — PRODUCT DISCOVERY communities only
+    //
+    // SALES RULE: Every subreddit must be a place where someone would:
+    //   ✅ Ask "what app should I use for X?"
+    //   ✅ Post "looking for an app that does X"
+    //   ✅ Discuss products, tools, and recommendations
+    //
+    // DO NOT include subreddits for:
+    //   ❌ Personal advice (MuslimMarriage, relationships, AITA)
+    //   ❌ Life issues / emotional support
+    //   ❌ Developer communities (FlutterDev, SwiftUI)
+    //   ❌ Meme/culture subs (izlam)
+    //   ❌ Generic community subs without product discussion
     
     private static let subredditMap: [String: [String]] = [
-        // Islam & Muslim-Specific
-        "islam": ["islam", "MuslimLounge", "Quran", "izlam", "hijabis", "islamicfinance",
-                  "progressive_islam", "MuslimMarriage", "Islaam",
-                  "converts", "LightUponLight", "IslamicStudies"],
+        // Islam — PRODUCT-relevant subs only (where people ask about apps/tools)
+        "islam": ["islam", "MuslimLounge", "Quran", "hijabis",
+                  "progressive_islam", "converts"],
         
-        // Arabic & Middle Eastern
-        "arabic": ["learn_arabic", "arabic", "arabs"],
-        "middleeast": ["MiddleEast", "saudiarabia", "UAE", "Egypt", "Jordan"],
+        // Arabic & Middle Eastern — language learning (app discovery)
+        "arabic": ["learn_arabic", "arabic", "languagelearning"],
+        "middleeast": ["saudiarabia", "UAE", "Egypt"],
         
-        // Other Religions — SEPARATE, only matched by their own triggers
-        "christianity": ["Christianity", "TrueChristian", "Bible", "Reformed"],
-        "buddhism": ["Buddhism", "zen", "Theravada"],
-        "judaism": ["Judaism", "jewish", "Torah"],
-        "hinduism": ["hinduism", "Hindu"],
+        // Other Religions — ONLY subs where people discuss tools/apps
+        "christianity": ["Christianity", "TrueChristian", "Bible"],
+        "buddhism": ["Buddhism", "Meditation"],
+        "judaism": ["Judaism", "jewish"],
+        "hinduism": ["hinduism"],
         "general_religion": ["religion", "spirituality"],
         
-        // Meditation & mindfulness (secular)
-        "meditation": ["Meditation", "Mindfulness", "zenhabits"],
+        // Meditation & mindfulness — app-discovery focused
+        "meditation": ["Meditation", "Mindfulness"],
         
-        // Business & Entrepreneurship (USER-facing)
+        // Business & Entrepreneurship
         "startup": ["Entrepreneur", "startups", "smallbusiness", "SideProject", "indiehackers"],
-        "ecommerce": ["ecommerce", "shopify", "FulfillmentByAmazon", "smallbusiness", "Etsy"],
+        "ecommerce": ["ecommerce", "shopify", "FulfillmentByAmazon", "Etsy"],
         "marketing": ["marketing", "digital_marketing", "SEO", "socialmedia", "content_marketing"],
-        "finance": ["personalfinance", "FinancialPlanning", "Bookkeeping", "povertyfinance"],
-        "realestate": ["realestateinvesting", "RealEstate", "PropertyManagement", "landlords"],
+        "finance": ["personalfinance", "FinancialPlanning", "Bookkeeping"],
+        "realestate": ["realestateinvesting", "RealEstate", "landlords"],
         "freelance": ["freelance", "WorkOnline", "remotework", "digitalnomad"],
         
-        // Productivity & Tools (USER-facing)
-        "productivity": ["productivity", "Notion", "ObsidianMD", "PKMS", "getdisciplined"],
+        // Productivity & Tools — HIGH app-discovery traffic
+        "productivity": ["productivity", "Notion", "ObsidianMD", "PKMS", "getdisciplined", "apps"],
         "projectmanagement": ["projectmanagement", "scrum", "agile"],
         
-        // Health & Wellness (USER-facing)
-        "health": ["HealthIT", "digitalhealth", "fitness", "mentalhealth", "selfimprovement"],
-        "diet": ["loseit", "EatCheapAndHealthy", "nutrition", "MealPrepSunday"],
+        // Health & Wellness — app-focused subs
+        "health": ["digitalhealth", "fitness", "selfimprovement", "mentalhealth"],
+        "diet": ["loseit", "nutrition", "MealPrepSunday"],
         
-        // Education (USER-facing)
-        "education": ["edtech", "OnlineLearning", "learnprogramming", "AskAcademia", "GetStudying"],
+        // Education — learning app discovery
+        "education": ["edtech", "OnlineLearning", "GetStudying", "languagelearning"],
         
-        // Creative (USER-facing — for people CREATING content, not developer tools)
+        // Creative — tool/software focused
         "design": ["graphic_design", "web_design", "UI_Design"],
-        "photography": ["photography", "videography", "Filmmakers"],
+        "photography": ["photography", "videography"],
         "writing": ["writing", "selfpublish", "blogging", "copywriting"],
-        "music": ["WeAreTheMusicMakers", "musicproduction", "Guitar", "piano"],
+        "music": ["WeAreTheMusicMakers", "musicproduction"],
         
         // Lifestyle
-        "food": ["Cooking", "MealPrepSunday", "EatCheapAndHealthy", "recipes"],
-        "gaming": ["gaming", "IndieGaming", "GameDesign"],
-        "travel": ["travel", "solotravel", "backpacking", "digitalnomad"],
-        "parenting": ["Parenting", "Mommit", "daddit", "beyondthebump"],
-        "pets": ["dogs", "cats", "pets", "Dogtraining"],
-        "sports": ["running", "bodyweightfitness", "homegym", "C25K"],
+        "food": ["Cooking", "MealPrepSunday", "recipes"],
+        "gaming": ["gaming", "IndieGaming"],
+        "travel": ["travel", "solotravel", "digitalnomad"],
+        "parenting": ["Parenting", "Mommit", "daddit"],
+        "pets": ["dogs", "cats", "Dogtraining"],
+        "sports": ["running", "bodyweightfitness", "homegym"],
         
-        // Tech (USER-facing — for people who USE tech, not build it)
+        // Tech — user-facing
         "ai_users": ["ChatGPT", "artificial", "singularity"],
-        "crypto": ["CryptoCurrency", "ethereum", "defi", "Bitcoin"],
+        "crypto": ["CryptoCurrency", "ethereum", "Bitcoin"],
         "saas": ["SaaS", "microsaas"],
         
         // Catch-all
         "general": ["Entrepreneur", "startups", "smallbusiness", "SideProject"],
     ]
     
-    // MARK: - Category Detection — STRICT triggers with word boundaries
-    // CRITICAL: Only trigger on EXPLICIT domain words that prove the product is in that space.
-    // NEVER trigger on generic words like "app", "mobile", "digital", "tool", "platform".
+    // MARK: - Category Detection — STRICT triggers
     
     private static let categoryTriggers: [(words: [String], category: String)] = [
-        // Islam — comprehensive word list
+        // Islam
         (["quran", "qur'an", "islamic", "islam", "muslim", "mosque", "salah", "dua", "hadith",
           "sunnah", "ramadan", "eid", "hijab", "halal", "imam", "sheikh", "fiqh", "tafsir",
           "surah", "ayah", "allah", "prophet", "muhammad", "mecca", "medina", "ummah", "dawah",
@@ -131,14 +138,14 @@ enum ProductAnalyzer {
         (["arabic", "arab", "عرب", "القرآن"], "arabic"),
         (["middle east", "saudi", "uae", "egypt", "jordan", "gulf", "khalij"], "middleeast"),
         
-        // Other religions — EXPLICIT only
+        // Other religions
         (["christian", "church", "bible", "gospel", "jesus", "baptist", "catholic", "protestant"], "christianity"),
         (["buddhist", "buddhism", "dharma", "sangha", "nirvana", "vipassana"], "buddhism"),
         (["jewish", "judaism", "torah", "synagogue", "rabbi", "kosher", "shabbat"], "judaism"),
         (["hindu", "hinduism", "vedic", "vedanta", "temple", "puja", "diwali"], "hinduism"),
         (["religion", "religious", "spiritual", "spirituality", "faith", "worship"], "general_religion"),
         
-        // Meditation — only on explicit meditation words
+        // Meditation
         (["meditation", "meditate", "mindfulness", "mindful", "breathwork", "calm", "stress relief"], "meditation"),
         
         // Business
@@ -182,7 +189,7 @@ enum ProductAnalyzer {
         (["pet", "dog", "cat", "puppy", "kitten", "animal", "veterinary"], "pets"),
         (["sport", "gym", "workout", "running", "marathon", "swim", "cycling", "yoga"], "sports"),
         
-        // Tech (USER-facing only)
+        // Tech
         (["chatgpt", "ai assistant", "artificial intelligence", "machine learning", "llm", "chatbot"], "ai_users"),
         (["cryptocurrency", "crypto", "bitcoin", "ethereum", "blockchain", "nft", "defi", "web3"], "crypto"),
         (["saas", "subscription software", "recurring revenue", "cloud software"], "saas"),
@@ -195,20 +202,18 @@ enum ProductAnalyzer {
         var keywords = Set<String>()
         var categories = Set<String>()
         
-        // 1. Detect categories using EXACT WORD matching (not substring regex)
+        // 1. Detect categories using EXACT WORD matching
         let descWords = Set(desc.components(separatedBy: .alphanumerics.inverted).filter { !$0.isEmpty })
         
         for trigger in categoryTriggers {
             var matched = false
             for word in trigger.words {
                 if word.contains(" ") {
-                    // Multi-word phrase — check in full description
                     if desc.contains(word) {
                         matched = true
                         break
                     }
                 } else {
-                    // Single word — exact word match
                     if descWords.contains(word) {
                         matched = true
                         break
@@ -259,14 +264,16 @@ enum ProductAnalyzer {
         var seenAdj = Set<String>()
         adjectives = adjectives.filter { seenAdj.insert($0).inserted }
         
-        // 3. Build SEARCH INTENT keywords (what someone would search for to find your product)
+        // 3. Build PRODUCT-SEARCH keywords
+        // The KEY insight: keywords MUST include "app" or "tool" context so we find
+        // posts where people are looking for PRODUCTS, not just discussing topics
         
-        // Core domain nouns (the most important)
+        // Core domain nouns
         for noun in nouns where noun.count > 3 {
             keywords.insert(noun)
         }
         
-        // Adjacent word pairs from the description (e.g., "quran reader", "daily prayers")
+        // Adjacent word pairs from the description
         let words = description.lowercased().components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
         for i in 0..<(words.count - 1) {
             let w1 = words[i].trimmingCharacters(in: .punctuationCharacters)
@@ -278,17 +285,23 @@ enum ProductAnalyzer {
             }
         }
         
-        // 4. Generate USER INTENT search phrases
-        // These are what a POTENTIAL CUSTOMER would type when looking for a product like this
+        // 4. Generate PRODUCT-INTENT search phrases
+        // These MUST include "app" / "tool" context to ensure we find product-seekers
         if let primaryNoun = nouns.first {
+            // Product-specific queries — these find BUYERS
+            keywords.insert("best \(primaryNoun) app")
+            keywords.insert("\(primaryNoun) app recommendation")
+            keywords.insert("recommend \(primaryNoun) app")
+            keywords.insert("looking for \(primaryNoun) app")
+            keywords.insert("\(primaryNoun) app alternative")
+            
+            // Still include generic but they'll be lower priority
             keywords.insert("best \(primaryNoun)")
-            keywords.insert("looking for \(primaryNoun)")
             keywords.insert("\(primaryNoun) recommendation")
             
-            // If there's a second noun, combine them
             if nouns.count > 1 {
                 let secondNoun = nouns[1]
-                keywords.insert("\(primaryNoun) \(secondNoun)")
+                keywords.insert("\(primaryNoun) \(secondNoun) app")
                 keywords.insert("best \(primaryNoun) \(secondNoun)")
             }
         }
@@ -304,15 +317,15 @@ enum ProductAnalyzer {
         // 6. Generate clean profile name
         let profileName = generateProfileName(from: description, nouns: nouns, adjectives: adjectives, categories: categories)
         
-        // Sort keywords: longer (more specific) first, take top 10
+        // Sort keywords: longer (more specific) first, take top 12
         let sortedKeywords = Array(keywords)
             .sorted { $0.count > $1.count }
-            .prefix(10)
+            .prefix(12)
             .map { String($0) }
         
         return AnalysisResult(
             keywords: sortedKeywords,
-            subreddits: Array(subreddits).sorted().prefix(10).map { String($0) },
+            subreddits: Array(subreddits).sorted().prefix(8).map { String($0) },
             profileName: profileName
         )
     }
