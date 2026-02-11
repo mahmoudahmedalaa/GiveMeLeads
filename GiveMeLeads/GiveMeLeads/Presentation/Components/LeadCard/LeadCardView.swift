@@ -5,6 +5,7 @@ struct LeadCardView: View {
     let lead: Lead
     let onSave: () -> Void
     let onDismiss: () -> Void
+    let onReply: () -> Void
     let onTap: () -> Void
     
     var body: some View {
@@ -106,6 +107,16 @@ struct LeadCardView: View {
                     }
                     .buttonStyle(.plain)
                     
+                    Button(action: onReply) {
+                        Image(systemName: "sparkles")
+                            .font(.system(size: 14))
+                            .foregroundColor(AppColors.primary400)
+                            .padding(6)
+                            .background(AppColors.primary400.opacity(0.1))
+                            .clipShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    
                     Button(action: onDismiss) {
                         Image(systemName: "xmark")
                             .font(.system(size: 12))
@@ -184,6 +195,7 @@ struct MiniScoreIndicator: View {
                     lead: lead,
                     onSave: {},
                     onDismiss: {},
+                    onReply: {},
                     onTap: {}
                 )
             }

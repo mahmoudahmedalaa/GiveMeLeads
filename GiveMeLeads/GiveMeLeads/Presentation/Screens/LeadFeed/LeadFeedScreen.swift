@@ -4,6 +4,8 @@ struct LeadFeedScreen: View {
     @State private var viewModel = LeadFeedViewModel()
     @State private var showScanResult = false
     @State private var showClearConfirm = false
+    @State private var showReplySheet = false
+    @State private var replyLead: Lead?
     
     var body: some View {
         NavigationStack {
@@ -95,6 +97,12 @@ struct LeadFeedScreen: View {
                 Button("Cancel", role: .cancel) {}
             } message: {
                 Text("This will remove all unsaved leads for this profile. Saved leads won't be affected.")
+            }
+            .sheet(isPresented: $showReplySheet) {
+                if let lead = replyLead {
+                    ReplySheetView(lead: lead)
+                        .presentationDetents([.medium, .large])
+                }
             }
         }
     }
@@ -309,6 +317,10 @@ struct LeadFeedScreen: View {
                             },
                             onDismiss: {
                                 Task { await viewModel.dismissLead(lead) }
+                            },
+                            onReply: {
+                                replyLead = lead
+                                showReplySheet = true
                             },
                             onTap: {}
                         )

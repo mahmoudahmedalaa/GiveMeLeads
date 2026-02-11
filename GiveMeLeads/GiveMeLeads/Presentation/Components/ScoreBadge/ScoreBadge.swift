@@ -35,27 +35,43 @@ struct ScoreBadge: View {
         AppColors.scoreColor(for: score)
     }
     
+    /// Human-readable tier label
+    static func tierLabel(for score: Int) -> String {
+        if score >= 80 { return "🔥 Hot Lead" }
+        if score >= 60 { return "🎯 Strong" }
+        if score >= 40 { return "👍 Decent" }
+        return "🔍 Low"
+    }
+    
     var body: some View {
-        ZStack {
-            // Background ring
-            Circle()
-                .stroke(scoreColor.opacity(0.2), lineWidth: size.strokeWidth)
+        VStack(spacing: size == .large ? 4 : 0) {
+            ZStack {
+                // Background ring
+                Circle()
+                    .stroke(scoreColor.opacity(0.2), lineWidth: size.strokeWidth)
+                
+                // Progress ring
+                Circle()
+                    .trim(from: 0, to: CGFloat(score) / 100)
+                    .stroke(
+                        scoreColor,
+                        style: StrokeStyle(lineWidth: size.strokeWidth, lineCap: .round)
+                    )
+                    .rotationEffect(.degrees(-90))
+                
+                // Score number
+                Text("\(score)")
+                    .font(size.font)
+                    .foregroundColor(scoreColor)
+            }
+            .frame(width: size.diameter, height: size.diameter)
             
-            // Progress ring
-            Circle()
-                .trim(from: 0, to: CGFloat(score) / 100)
-                .stroke(
-                    scoreColor,
-                    style: StrokeStyle(lineWidth: size.strokeWidth, lineCap: .round)
-                )
-                .rotationEffect(.degrees(-90))
-            
-            // Score number
-            Text("\(score)")
-                .font(size.font)
-                .foregroundColor(scoreColor)
+            if size == .large {
+                Text(ScoreBadge.tierLabel(for: score))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(scoreColor)
+            }
         }
-        .frame(width: size.diameter, height: size.diameter)
     }
 }
 
