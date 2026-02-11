@@ -2,7 +2,15 @@ import Foundation
 import Observation
 import Supabase
 
-/// Profile-aware lead feed — NO auto-scan, refreshes profiles on appear, clean profile display
+/// Edge Function scan response
+private struct ScanResponse: Codable {
+    let message: String?
+    let leads_found: Int?
+    let profiles_scanned: Int?
+    let error: String?
+}
+
+/// Profile-aware lead feed — server-side scanning via Edge Function, auto-monitoring via cron
 @Observable
 final class LeadFeedViewModel {
     var leads: [Lead] = []
@@ -19,7 +27,6 @@ final class LeadFeedViewModel {
     
     private let leadRepo: LeadRepositoryProtocol
     private let keywordRepo: KeywordRepositoryProtocol
-    private let redditSearch = RedditSearchService()
     private var currentOffset = 0
     private let pageSize = 20
     
@@ -121,18 +128,12 @@ final class LeadFeedViewModel {
         }
     }
     
-    // MARK: - Scanning (ONLY when user taps scan button)
+    // MARK: - Scanning (calls server-side Edge Function)
     
-    /// Scan Reddit for the selected profile only
+    /// Trigger a server-side scan via Edge Function
     func scanForNewLeads() async {
-        guard let profile = selectedProfile else {
+        guard selectedProfile != nil else {
             error = "No profile selected. Go to Profiles tab to create one."
-            return
-        }
-        
-        let keywords = profile.keywords?.map(\.keyword) ?? []
-        guard !keywords.isEmpty else {
-            error = "No keywords in this profile. Add keywords first."
             return
         }
         
@@ -141,114 +142,28 @@ final class LeadFeedViewModel {
         error = nil
         
         do {
-            guard let userId = try? await SupabaseManager.shared.client.auth.session.user.id else {
-                error = "Session expired. Please sign in again."
-                isScanning = false
-                return
-            }
+            let session = try await SupabaseManager.shared.client.auth.session
+            let token = session.accessToken
             
-            let subreddits = profile.subreddits.isEmpty ? ["all"] : profile.subreddits
-            let productDesc = keywords.joined(separator: " ")
+            // Call the server-side Edge Function
+            let response: ScanResponse = try await SupabaseManager.shared.client
+                .functions
+                .invoke(
+                    "scan-reddit",
+                    options: .init(
+                        headers: ["Authorization": "Bearer \(token)"]
+                    )
+                )
             
-            // Search Reddit
-            let posts = try await redditSearch.search(
-                keywords: keywords,
-                subreddits: subreddits,
-                limit: 25
-            )
-            
-            let comments = try await redditSearch.searchComments(
-                keywords: keywords,
-                subreddits: subreddits,
-                limit: 15
-            )
-            
-            var leadsToSave: [NewLead] = []
-            
-            // Analyze posts
-            for post in posts {
-                guard let intel = redditSearch.analyzePost(
-                    post, keywords: keywords, productDescription: productDesc
-                ) else { continue }
-                
-                leadsToSave.append(NewLead(
-                    userId: userId,
-                    profileId: profile.id,
-                    keywordId: nil,
-                    redditPostId: "t3_\(post.id)",
-                    subreddit: post.subreddit,
-                    author: post.author,
-                    title: post.title,
-                    body: post.selftext,
-                    url: "https://reddit.com\(post.permalink)",
-                    score: intel.score,
-                    scoreBreakdown: intel.breakdown,
-                    upvotes: post.ups,
-                    commentCount: post.numComments,
-                    status: .new,
-                    postedAt: Date(timeIntervalSince1970: post.createdUtc),
-                    discoveredAt: Date(),
-                    relevanceInsight: intel.relevanceInsight,
-                    matchingSnippet: intel.matchingSnippet,
-                    suggestedApproach: intel.suggestedApproach
-                ))
-            }
-            
-            // Analyze comments
-            for comment in comments {
-                guard let intel = redditSearch.analyzeComment(
-                    comment, keywords: keywords, productDescription: productDesc
-                ) else { continue }
-                
-                leadsToSave.append(NewLead(
-                    userId: userId,
-                    profileId: profile.id,
-                    keywordId: nil,
-                    redditPostId: "t1_\(comment.id)",
-                    subreddit: comment.subreddit,
-                    author: comment.author,
-                    title: comment.linkTitle ?? "Reddit Comment",
-                    body: comment.body,
-                    url: "https://reddit.com\(comment.permalink)",
-                    score: intel.score,
-                    scoreBreakdown: intel.breakdown,
-                    upvotes: comment.ups,
-                    commentCount: 0,
-                    status: .new,
-                    postedAt: Date(timeIntervalSince1970: comment.createdUtc),
-                    discoveredAt: Date(),
-                    relevanceInsight: intel.relevanceInsight,
-                    matchingSnippet: intel.matchingSnippet,
-                    suggestedApproach: intel.suggestedApproach
-                ))
-            }
-            
-            // Batch insert
-            var totalFound = 0
-            if !leadsToSave.isEmpty {
-                do {
-                    try await SupabaseManager.shared.client
-                        .from("leads")
-                        .insert(leadsToSave)
-                        .execute()
-                    totalFound = leadsToSave.count
-                } catch {
-                    for lead in leadsToSave {
-                        do {
-                            try await SupabaseManager.shared.client
-                                .from("leads")
-                                .insert(lead)
-                                .execute()
-                            totalFound += 1
-                        } catch { continue }
-                    }
-                }
-            }
-            
-            if totalFound > 0 {
-                scanMessage = "🎯 \(totalFound) new lead\(totalFound == 1 ? "" : "s") found!"
+            if let err = response.error {
+                self.error = err
             } else {
-                scanMessage = "No new leads found right now. Reddit might not have matching posts yet — check back later."
+                let found = response.leads_found ?? 0
+                if found > 0 {
+                    scanMessage = "🎯 \(found) new lead\(found == 1 ? "" : "s") found!"
+                } else {
+                    scanMessage = "No new leads right now. We'll keep monitoring and notify you when new leads appear."
+                }
             }
             
             await fetchLeadsForSelectedProfile()

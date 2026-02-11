@@ -216,7 +216,7 @@ struct LeadFeedScreen: View {
                         .foregroundColor(AppColors.textSecondary)
                         .multilineTextAlignment(.center)
                 } else {
-                    Text("Tap the scan button to search Reddit\nfor people looking for your product")
+                    Text("We're monitoring Reddit automatically.\nTap below for an instant scan.")
                         .font(AppTypography.bodyMedium)
                         .foregroundColor(AppColors.textSecondary)
                         .multilineTextAlignment(.center)
@@ -352,11 +352,11 @@ struct ScanTimerView: View {
             ProgressView()
                 .tint(AppColors.primary400)
             
-            Text("Searching Reddit... \(elapsed)s")
+            Text("Scanning Reddit... \(elapsed)s")
                 .font(AppTypography.bodySmall)
                 .foregroundColor(AppColors.textTertiary)
             
-            Text("This usually takes 10-20 seconds")
+            Text("Server is searching — usually takes a few seconds")
                 .font(AppTypography.caption)
                 .foregroundColor(AppColors.textTertiary.opacity(0.7))
         }
