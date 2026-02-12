@@ -1,5 +1,14 @@
 import Foundation
 
+/// Protocol abstracting Reddit search — enables DI and testing
+protocol RedditSearchServiceProtocol {
+    func search(keywords: [String], subreddits: [String], limit: Int) async throws -> [RedditSearchService.RedditPost]
+    func searchComments(keywords: [String], subreddits: [String], limit: Int) async throws -> [RedditSearchService.RedditComment]
+    func analyzePost(_ post: RedditSearchService.RedditPost, keywords: [String], productDescription: String) -> RedditSearchService.LeadIntelligence?
+    func analyzeComment(_ comment: RedditSearchService.RedditComment, keywords: [String], productDescription: String) -> RedditSearchService.LeadIntelligence?
+}
+
+
 /// Protocol for authentication operations
 protocol AuthRepositoryProtocol {
     /// Sign in with Apple using identity token

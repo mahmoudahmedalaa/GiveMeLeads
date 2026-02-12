@@ -2,7 +2,7 @@ import Foundation
 
 /// Searches Reddit's public JSON API for posts AND comments matching keywords.
 /// Generates actionable intelligence: relevance insights, matching snippets, and approach suggestions.
-final class RedditSearchService {
+final class RedditSearchService: RedditSearchServiceProtocol {
     
     struct RedditPost: Codable {
         let id: String

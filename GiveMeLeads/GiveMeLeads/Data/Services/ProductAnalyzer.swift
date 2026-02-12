@@ -253,9 +253,25 @@ enum ProductAnalyzer {
             let word = String(description[range]).lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
             guard word.count > 2, !stopWords.contains(word) else { return true }
             
-            if tag == .noun { nouns.append(word) }
-            else if tag == .adjective { adjectives.append(word) }
+            // Accept nouns, proper nouns (.otherWord), and untagged words (nil tag)
+            // NLP often misclassifies proper nouns like "Quran" or short-text words
+            if tag == .noun || tag == .otherWord || tag == nil {
+                nouns.append(word)
+            } else if tag == .adjective {
+                adjectives.append(word)
+            }
             return true
+        }
+        
+        // FALLBACK: If NLP found zero nouns, extract non-stop-words directly
+        // This handles cases where NLP tagger fails on short descriptions or
+        // doesn't recognize domain-specific words (Quran, meditation, etc.)
+        if nouns.isEmpty {
+            let fallbackWords = description.lowercased()
+                .components(separatedBy: .alphanumerics.inverted)
+                .filter { $0.count > 2 && !stopWords.contains($0) }
+            var seen = Set<String>()
+            nouns = fallbackWords.filter { seen.insert($0).inserted }
         }
         
         // Deduplicate while preserving order
@@ -269,7 +285,7 @@ enum ProductAnalyzer {
         // posts where people are looking for PRODUCTS, not just discussing topics
         
         // Core domain nouns
-        for noun in nouns where noun.count > 3 {
+        for noun in nouns where noun.count > 2 {
             keywords.insert(noun)
         }
         

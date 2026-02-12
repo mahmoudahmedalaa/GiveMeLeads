@@ -60,12 +60,15 @@ final class AuthRepository: AuthRepositoryProtocol {
 }
 
 /// App-specific errors
-enum AppError: LocalizedError {
+enum AppError: LocalizedError, Equatable {
     case authFailed(String)
     case networkError(String)
     case notFound(String)
     case subscriptionRequired
     case limitReached(String)
+    case rateLimited
+    case invalidInput(String)
+    case unknown(String)
     
     var errorDescription: String? {
         switch self {
@@ -74,6 +77,43 @@ enum AppError: LocalizedError {
         case .notFound(let msg): "Not found: \(msg)"
         case .subscriptionRequired: "Active subscription required"
         case .limitReached(let msg): "Limit reached: \(msg)"
+        case .rateLimited: "Rate limited"
+        case .invalidInput(let msg): "Invalid input: \(msg)"
+        case .unknown(let msg): "Error: \(msg)"
         }
+    }
+    
+    /// User-facing message — clean, actionable, no technical jargon
+    var userMessage: String {
+        switch self {
+        case .authFailed: "Session expired. Please sign in again."
+        case .networkError: "Network issue. Check your connection and try again."
+        case .notFound(let msg): msg
+        case .subscriptionRequired: "An active subscription is required."
+        case .limitReached(let msg): msg
+        case .rateLimited: "Reddit is rate-limiting requests. Please wait a minute and try again."
+        case .invalidInput(let msg): msg
+        case .unknown: "Something went wrong. Please try again."
+        }
+    }
+    
+    /// Map an arbitrary Error into a typed AppError
+    static func from(_ error: Error) -> AppError {
+        if let appError = error as? AppError {
+            return appError
+        }
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .notConnectedToInternet, .networkConnectionLost:
+                return .networkError("No internet connection")
+            case .timedOut:
+                return .networkError("Request timed out")
+            case .cancelled:
+                return .networkError("Request was cancelled")
+            default:
+                return .networkError(urlError.localizedDescription)
+            }
+        }
+        return .unknown(error.localizedDescription)
     }
 }

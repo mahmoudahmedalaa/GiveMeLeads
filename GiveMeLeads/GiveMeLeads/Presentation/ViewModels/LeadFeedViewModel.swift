@@ -3,8 +3,12 @@ import Observation
 import Supabase
 
 /// Profile-aware lead feed — client-side scanning via Reddit JSON API
+@MainActor
 @Observable
 final class LeadFeedViewModel {
+    
+    // MARK: - Public State
+    
     var leads: [Lead] = []
     var savedLeads: [Lead] = []
     var profiles: [TrackingProfile] = []
@@ -12,24 +16,39 @@ final class LeadFeedViewModel {
     var isLoading = false
     var isRefreshing = false
     var isScanning = false
-    var scanMessage: String?
     var scanProgress: String?
-    var error: String?
+    var scanSummary: String?
+    var error: AppError?
     var selectedLead: Lead?
     var hasLoadedOnce = false
+    private(set) var hasMore = true
+    
+    /// User-facing error string for bindings that expect String?
+    var errorMessage: String? { error?.userMessage }
+    
+    // MARK: - Private
     
     private let leadRepo: LeadRepositoryProtocol
     private let keywordRepo: KeywordRepositoryProtocol
-    private let redditSearch = RedditSearchService()
+    private let redditSearch: RedditSearchServiceProtocol
     private var currentOffset = 0
     private let pageSize = 20
     
+    private var scanTask: Task<Void, Never>?
+    private var fetchTask: Task<Void, Never>?
+    private var lastScanAtByProfile: [UUID: Date] = [:]
+    private var isLoadingMore = false
+    
+    // MARK: - Init
+    
     init(
         leadRepo: LeadRepositoryProtocol = LeadRepository(),
-        keywordRepo: KeywordRepositoryProtocol = KeywordRepository()
+        keywordRepo: KeywordRepositoryProtocol = KeywordRepository(),
+        redditSearch: RedditSearchServiceProtocol = RedditSearchService()
     ) {
         self.leadRepo = leadRepo
         self.keywordRepo = keywordRepo
+        self.redditSearch = redditSearch
     }
     
     // MARK: - Initial Load (called on .task — NO auto-scan)
@@ -43,6 +62,7 @@ final class LeadFeedViewModel {
         }
         hasLoadedOnce = true
         isLoading = true
+        defer { isLoading = false }
         
         do {
             profiles = try await keywordRepo.fetchProfiles()
@@ -55,10 +75,8 @@ final class LeadFeedViewModel {
                 await fetchLeadsForSelectedProfile()
             }
         } catch {
-            self.error = "Failed to load profiles"
+            self.error = .from(error)
         }
-        
-        isLoading = false
     }
     
     /// Refresh profiles from DB (catches deleted profiles, new profiles from setup)
@@ -73,9 +91,10 @@ final class LeadFeedViewModel {
                     // Profile was deleted — reset
                     selectedProfile = freshProfiles.first(where: \.isActive) ?? freshProfiles.first
                     leads = []
-                    scanMessage = nil
+                    scanSummary = nil
                     error = nil
                     currentOffset = 0
+                    hasMore = true
                     
                     if selectedProfile != nil {
                         await fetchLeadsForSelectedProfile()
@@ -98,60 +117,103 @@ final class LeadFeedViewModel {
     
     // MARK: - Profile Switching
     
-    /// Switch to a different profile — clears old results and loads new ones
+    /// Switch to a different profile — cancels in-flight work, clears old results, loads new
     func switchToProfile(_ profile: TrackingProfile) async {
         guard profile.id != selectedProfile?.id else { return }
+        
+        // Cancel any in-flight work
+        scanTask?.cancel()
+        scanTask = nil
+        fetchTask?.cancel()
+        fetchTask = nil
+        
         selectedProfile = profile
-        scanMessage = nil
+        scanSummary = nil
+        scanProgress = nil
         error = nil
         leads = []
         currentOffset = 0
+        hasMore = true
+        isScanning = false
+        
         await fetchLeadsForSelectedProfile()
     }
     
     /// Clear all new leads for current profile
     func clearResults() async {
         guard let profile = selectedProfile else { return }
+        
+        // Cancel any in-flight work
+        scanTask?.cancel()
+        scanTask = nil
+        fetchTask?.cancel()
+        fetchTask = nil
+        
         do {
             try await leadRepo.clearLeadsForProfile(profileId: profile.id)
             leads = []
             currentOffset = 0
-            scanMessage = "Results cleared. Tap 🔍 to find new leads."
+            hasMore = true
+            scanSummary = "Results cleared. Tap 🔍 to find new leads."
         } catch {
-            self.error = "Failed to clear results"
+            self.error = .from(error)
         }
     }
     
     // MARK: - Scanning (client-side — Reddit blocks cloud IPs)
     
-    /// Scan Reddit from the device and save leads to Supabase
-    func scanForNewLeads() async {
+    /// Kickoff a scan — cancels any existing scan and starts a new one
+    func scanForNewLeads() {
+        scanTask?.cancel()
+        scanTask = Task { await performScan() }
+    }
+    
+    /// Core scan logic — runs in a Task, supports cancellation
+    private func performScan() async {
         guard let profile = selectedProfile else {
-            error = "No profile selected. Go to Profiles tab to create one."
+            error = .invalidInput("No profile selected. Go to Profiles tab to create one.")
             return
         }
         
         let keywords = profile.keywords?.map(\.keyword) ?? []
         guard !keywords.isEmpty else {
-            error = "This profile has no keywords. Edit it to add some."
+            error = .invalidInput("This profile has no keywords. Edit it to add some.")
             return
         }
         
+        let subreddits = profile.subreddits.isEmpty ? ["all"] : profile.subreddits
+        guard !subreddits.isEmpty else {
+            error = .invalidInput("This profile has no subreddits. Edit it to add some.")
+            return
+        }
+        
+        // Cooldown check — prevent spamming Reddit
+        if let lastScan = lastScanAtByProfile[profile.id] {
+            let elapsed = Date().timeIntervalSince(lastScan)
+            if elapsed < 60 {
+                let remaining = Int(60 - elapsed)
+                scanSummary = "⏳ Please wait \(remaining)s before scanning again."
+                return
+            }
+        }
+        
         isScanning = true
-        scanMessage = nil
-        scanProgress = "Searching Reddit..."
+        scanSummary = nil
         error = nil
+        scanProgress = "Searching Reddit..."
+        defer {
+            scanProgress = nil
+            isScanning = false
+        }
         
         do {
             guard let userId = try? await SupabaseManager.shared.client.auth.session.user.id else {
-                error = "Session expired. Please sign in again."
-                isScanning = false
+                error = .authFailed("Not authenticated")
                 return
             }
             
-            let subreddits = profile.subreddits.isEmpty ? ["all"] : profile.subreddits
-            
             // Search posts
+            try Task.checkCancellation()
             scanProgress = "Searching Reddit posts..."
             let posts = try await redditSearch.search(
                 keywords: keywords,
@@ -160,6 +222,7 @@ final class LeadFeedViewModel {
             )
             
             // Search comments
+            try Task.checkCancellation()
             scanProgress = "Searching Reddit comments..."
             let comments = try await redditSearch.searchComments(
                 keywords: keywords,
@@ -167,12 +230,18 @@ final class LeadFeedViewModel {
                 limit: 15
             )
             
+            try Task.checkCancellation()
             scanProgress = "Analyzing \(posts.count) posts + \(comments.count) comments..."
             let productDesc = keywords.joined(separator: " ")
-            var totalFound = 0
+            
+            var savedCount = 0
+            var duplicateCount = 0
+            var failureCount = 0
             
             // Analyze and save posts
             for post in posts {
+                try Task.checkCancellation()
+                
                 guard let intel = redditSearch.analyzePost(
                     post,
                     keywords: keywords,
@@ -206,14 +275,17 @@ final class LeadFeedViewModel {
                         .from("leads")
                         .insert(newLead)
                         .execute()
-                    totalFound += 1
+                    savedCount += 1
                 } catch {
-                    continue // Skip duplicates
+                    // Duplicate key or other insert error
+                    duplicateCount += 1
                 }
             }
             
             // Analyze and save comments
             for comment in comments {
+                try Task.checkCancellation()
+                
                 guard let intel = redditSearch.analyzeComment(
                     comment,
                     keywords: keywords,
@@ -247,26 +319,36 @@ final class LeadFeedViewModel {
                         .from("leads")
                         .insert(newLead)
                         .execute()
-                    totalFound += 1
+                    savedCount += 1
                 } catch {
-                    continue // Skip duplicates
+                    duplicateCount += 1
                 }
             }
             
-            if totalFound > 0 {
-                scanMessage = "🎯 \(totalFound) new lead\(totalFound == 1 ? "" : "s") found!"
+            // Record cooldown timestamp
+            lastScanAtByProfile[profile.id] = Date()
+            
+            // Build rich summary
+            var summaryParts: [String] = []
+            if savedCount > 0 {
+                summaryParts.append("🎯 \(savedCount) new lead\(savedCount == 1 ? "" : "s") found!")
+            }
+            if duplicateCount > 0 {
+                summaryParts.append("\(duplicateCount) duplicate\(duplicateCount == 1 ? "" : "s") skipped")
+            }
+            if summaryParts.isEmpty {
+                scanSummary = "No new leads right now. Searched \(posts.count) posts + \(comments.count) comments."
             } else {
-                scanMessage = "No new leads right now. Searched \(posts.count) posts + \(comments.count) comments."
+                scanSummary = summaryParts.joined(separator: " · ")
             }
             
             await fetchLeadsForSelectedProfile()
             
+        } catch is CancellationError {
+            scanSummary = "Scan cancelled."
         } catch {
-            self.error = "Scan failed: \(error.localizedDescription)"
+            self.error = .from(error)
         }
-        
-        scanProgress = nil
-        isScanning = false
     }
     
     // MARK: - Fetching
@@ -280,6 +362,7 @@ final class LeadFeedViewModel {
         
         isLoading = leads.isEmpty
         error = nil
+        defer { isLoading = false }
         
         do {
             let fetched = try await leadRepo.fetchLeads(
@@ -290,40 +373,44 @@ final class LeadFeedViewModel {
             )
             leads = fetched
             currentOffset = fetched.count
+            hasMore = fetched.count == pageSize
         } catch {
-            self.error = error.localizedDescription
+            self.error = .from(error)
         }
-        
-        isLoading = false
     }
     
     /// Legacy fetch (all leads regardless of profile)
     func fetchLeads() async {
         isLoading = leads.isEmpty
         error = nil
+        defer { isLoading = false }
         
         do {
             let fetched = try await leadRepo.fetchLeads(status: .new, limit: pageSize, offset: 0)
             leads = fetched
             currentOffset = fetched.count
+            hasMore = fetched.count == pageSize
         } catch {
-            self.error = error.localizedDescription
+            self.error = .from(error)
         }
-        
-        isLoading = false
     }
     
     /// Pull to refresh
     func refresh() async {
         isRefreshing = true
+        defer { isRefreshing = false }
         await refreshProfiles()
         await fetchLeadsForSelectedProfile()
-        isRefreshing = false
     }
     
-    /// Load more leads
+    /// Load more leads (pagination)
     func loadMore() async {
+        guard !isLoadingMore, hasMore else { return }
         guard let profile = selectedProfile else { return }
+        
+        isLoadingMore = true
+        defer { isLoadingMore = false }
+        
         do {
             let more = try await leadRepo.fetchLeads(
                 profileId: profile.id,
@@ -331,10 +418,15 @@ final class LeadFeedViewModel {
                 limit: pageSize,
                 offset: currentOffset
             )
-            leads.append(contentsOf: more)
+            
+            // Deduplicate by id
+            let existingIds = Set(leads.map(\.id))
+            let unique = more.filter { !existingIds.contains($0.id) }
+            leads.append(contentsOf: unique)
             currentOffset += more.count
+            hasMore = more.count == pageSize
         } catch {
-            self.error = error.localizedDescription
+            self.error = .from(error)
         }
     }
     
@@ -345,7 +437,7 @@ final class LeadFeedViewModel {
             try await leadRepo.updateLeadStatus(leadId: lead.id, status: .saved)
             leads.removeAll { $0.id == lead.id }
         } catch {
-            self.error = error.localizedDescription
+            self.error = .from(error)
         }
     }
     
@@ -354,7 +446,7 @@ final class LeadFeedViewModel {
             try await leadRepo.updateLeadStatus(leadId: lead.id, status: .dismissed)
             leads.removeAll { $0.id == lead.id }
         } catch {
-            self.error = error.localizedDescription
+            self.error = .from(error)
         }
     }
     
@@ -362,7 +454,7 @@ final class LeadFeedViewModel {
         do {
             try await leadRepo.updateLeadStatus(leadId: lead.id, status: .contacted)
         } catch {
-            self.error = error.localizedDescription
+            self.error = .from(error)
         }
     }
     
@@ -370,7 +462,7 @@ final class LeadFeedViewModel {
         do {
             savedLeads = try await leadRepo.fetchLeads(status: .saved, limit: 50, offset: 0)
         } catch {
-            self.error = error.localizedDescription
+            self.error = .from(error)
         }
     }
 }

@@ -75,19 +75,26 @@ struct LeadFeedScreen: View {
                 // ALWAYS refresh profiles on tab switch — catches new/deleted profiles
                 Task { await viewModel.refreshProfiles() }
             }
+            // Show alert when scan completes (scanSummary or error becomes non-nil)
+            .onChange(of: viewModel.scanSummary) { _, newValue in
+                if newValue != nil { showScanResult = true }
+            }
+            .onChange(of: viewModel.error) { _, newValue in
+                if newValue != nil && !viewModel.isScanning { showScanResult = true }
+            }
             .alert(
                 viewModel.error != nil ? "Scan Issue" : "Scan Complete",
                 isPresented: $showScanResult
             ) {
                 Button("OK") {
-                    viewModel.scanMessage = nil
+                    viewModel.scanSummary = nil
                     viewModel.error = nil
                 }
             } message: {
-                if let error = viewModel.error {
-                    Text(error)
+                if let errorMsg = viewModel.errorMessage {
+                    Text(errorMsg)
                 } else {
-                    Text(viewModel.scanMessage ?? "Done")
+                    Text(viewModel.scanSummary ?? "Done")
                 }
             }
             .alert("Clear Results?", isPresented: $showClearConfirm) {
@@ -108,10 +115,7 @@ struct LeadFeedScreen: View {
     }
     
     private func triggerScan() {
-        Task {
-            await viewModel.scanForNewLeads()
-            showScanResult = true
-        }
+        viewModel.scanForNewLeads()
     }
     
     // MARK: - Profile Selector
@@ -218,7 +222,7 @@ struct LeadFeedScreen: View {
                         .foregroundColor(AppColors.textPrimary)
                 }
                 
-                if let msg = viewModel.scanMessage {
+                if let msg = viewModel.scanSummary {
                     Text(msg)
                         .font(AppTypography.bodyMedium)
                         .foregroundColor(AppColors.textSecondary)
@@ -255,7 +259,7 @@ struct LeadFeedScreen: View {
         ScrollView {
             LazyVStack(spacing: AppSpacing.spacing4) {
                 // Scan result banner
-                if let msg = viewModel.scanMessage {
+                if let msg = viewModel.scanSummary {
                     HStack {
                         Image(systemName: msg.contains("🎯") ? "checkmark.circle.fill" : "info.circle.fill")
                             .foregroundColor(msg.contains("🎯") ? AppColors.success : AppColors.accentCyan)
@@ -263,7 +267,7 @@ struct LeadFeedScreen: View {
                             .font(AppTypography.bodySmall)
                             .foregroundColor(msg.contains("🎯") ? AppColors.success : AppColors.accentCyan)
                         Spacer()
-                        Button(action: { viewModel.scanMessage = nil }) {
+                        Button(action: { viewModel.scanSummary = nil }) {
                             Image(systemName: "xmark")
                                 .font(.system(size: 12))
                                 .foregroundColor(AppColors.textTertiary)
