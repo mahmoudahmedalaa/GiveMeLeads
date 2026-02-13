@@ -18,7 +18,7 @@ struct SettingsScreen: View {
                     VStack(spacing: AppSpacing.spacing6) {
                         // Subscription section
                         settingsSection("Subscription") {
-                            settingsRow(icon: "crown.fill", label: "Plan", value: "Trial — 7 days")
+                            settingsRow(icon: "crown.fill", label: "Plan", value: GatingService.shared.currentPlan.displayName)
                             settingsRow(icon: "creditcard.fill", label: "Manage", value: "") {
                                 // TODO: Open paywall
                                 router.showPaywall = true
@@ -75,6 +75,35 @@ struct SettingsScreen: View {
                                 .padding(AppSpacing.spacing4)
                             }
                         }
+                        
+                        // Debug section (remove before release)
+                        #if DEBUG
+                        settingsSection("🛠 Debug") {
+                            VStack(alignment: .leading, spacing: AppSpacing.spacing2) {
+                                HStack {
+                                    Image(systemName: "wrench.and.screwdriver")
+                                        .foregroundColor(.orange)
+                                        .frame(width: 24)
+                                    Text("Override Plan")
+                                        .font(AppTypography.bodyMedium)
+                                        .foregroundColor(AppColors.textPrimary)
+                                    Spacer()
+                                    Picker("", selection: Bindable(GatingService.shared).currentPlan) {
+                                        ForEach(Plan.allCases, id: \.self) { plan in
+                                            Text(plan.displayName).tag(plan)
+                                        }
+                                    }
+                                    .pickerStyle(.segmented)
+                                    .frame(width: 200)
+                                }
+                                
+                                Text("Current: \(GatingService.shared.currentPlan.displayName) — \(GatingService.shared.entitlements.maxVisibleLeads) leads, \(GatingService.shared.entitlements.maxScansPerDay) scans/day")
+                                    .font(AppTypography.caption)
+                                    .foregroundColor(.orange.opacity(0.7))
+                            }
+                            .padding(AppSpacing.spacing4)
+                        }
+                        #endif
                         
                         // App info
                         VStack(spacing: AppSpacing.spacing1) {
