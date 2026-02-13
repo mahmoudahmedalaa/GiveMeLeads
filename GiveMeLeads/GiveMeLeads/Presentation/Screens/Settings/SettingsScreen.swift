@@ -6,7 +6,7 @@ struct SettingsScreen: View {
     @Environment(AppRouter.self) private var router
     @State private var viewModel: AuthViewModel?
     @State private var showDeleteConfirm = false
-    @State private var notificationThreshold: Double = 80
+    @State private var notificationThreshold: Double = 8
     
     var body: some View {
         NavigationStack {
@@ -40,10 +40,10 @@ struct SettingsScreen: View {
                                         .foregroundColor(AppColors.scoreColor(for: Int(notificationThreshold)))
                                 }
                                 
-                                Slider(value: $notificationThreshold, in: 0...100, step: 5)
+                                Slider(value: $notificationThreshold, in: 0...10, step: 1)
                                     .tint(AppColors.primary500)
                                 
-                                Text("Only notify for leads scoring ≥\(Int(notificationThreshold))")
+                                Text("Only notify for leads scoring ≥\(Int(notificationThreshold))/10")
                                     .font(AppTypography.bodySmall)
                                     .foregroundColor(AppColors.textTertiary)
                             }

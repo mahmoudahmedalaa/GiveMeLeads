@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Circular badge showing lead AI intent score (0-100)
+/// Circular badge showing lead AI intent score (0-10)
 struct ScoreBadge: View {
     let score: Int
     let size: BadgeSize
@@ -37,9 +37,9 @@ struct ScoreBadge: View {
     
     /// Human-readable tier label
     static func tierLabel(for score: Int) -> String {
-        if score >= 80 { return "🔥 Hot Lead" }
-        if score >= 60 { return "🎯 Strong" }
-        if score >= 40 { return "👍 Decent" }
+        if score >= 8 { return "🔥 Hot Lead" }
+        if score >= 6 { return "🎯 Strong" }
+        if score >= 4 { return "👍 Decent" }
         return "🔍 Low"
     }
     
@@ -52,7 +52,7 @@ struct ScoreBadge: View {
                 
                 // Progress ring
                 Circle()
-                    .trim(from: 0, to: CGFloat(score) / 100)
+                    .trim(from: 0, to: CGFloat(score) / 10)
                     .stroke(
                         scoreColor,
                         style: StrokeStyle(lineWidth: size.strokeWidth, lineCap: .round)
@@ -111,9 +111,9 @@ struct ScoreChip: View {
 
 #Preview {
     VStack(spacing: 24) {
-        ScoreBadge(score: 92, size: .large)
-        ScoreBadge(score: 67, size: .small)
-        ScoreBadge(score: 34, size: .small)
+        ScoreBadge(score: 9, size: .large)
+        ScoreBadge(score: 7, size: .small)
+        ScoreBadge(score: 3, size: .small)
         ScoreBreakdownView(breakdown: ScoreBreakdown(intent: 95, urgency: 88, fit: 94))
     }
     .padding()

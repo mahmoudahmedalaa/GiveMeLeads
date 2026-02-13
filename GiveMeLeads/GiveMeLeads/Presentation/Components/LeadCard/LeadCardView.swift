@@ -141,7 +141,7 @@ struct LeadCardView: View {
     }
     
     private var leadBorderGradient: some ShapeStyle {
-        if let score = lead.score, score >= 70 {
+        if let score = lead.score, score >= 7 {
             return AnyShapeStyle(AppColors.scoreHighGradient.opacity(0.4))
         }
         return AnyShapeStyle(Color.white.opacity(0.06))

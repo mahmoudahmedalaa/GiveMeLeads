@@ -120,6 +120,13 @@ final class ProductSetupViewModel {
             
             createdProfileId = profile.id
             
+            // Notify app that a new profile was created so Leads can auto-select it
+            NotificationCenter.default.post(
+                name: .profileCreated,
+                object: nil,
+                userInfo: ["profileId": profile.id]
+            )
+            
             // 2. Add keywords to profile
             scanProgress = "Adding keywords..."
             for keyword in suggestedKeywords {

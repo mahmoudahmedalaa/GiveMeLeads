@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import Supabase
+import Combine
 
 /// Profile-aware lead feed — client-side scanning via Reddit JSON API
 @MainActor
@@ -38,6 +39,7 @@ final class LeadFeedViewModel {
     private var fetchTask: Task<Void, Never>?
     private var lastScanAtByProfile: [UUID: Date] = [:]
     private var isLoadingMore = false
+    private var cancellables = Set<AnyCancellable>()
     
     // MARK: - Init
     
@@ -49,6 +51,14 @@ final class LeadFeedViewModel {
         self.leadRepo = leadRepo
         self.keywordRepo = keywordRepo
         self.redditSearch = redditSearch
+        
+        // Observe profile creation events to auto-select and load the new profile
+        NotificationCenter.default.publisher(for: .profileCreated)
+            .compactMap { $0.userInfo?["profileId"] as? UUID }
+            .sink { [weak self] profileId in
+                Task { await self?.selectProfileAndLoad(profileId: profileId) }
+            }
+            .store(in: &cancellables)
     }
     
     // MARK: - Initial Load (called on .task — NO auto-scan)
@@ -128,6 +138,39 @@ final class LeadFeedViewModel {
         fetchTask = nil
         
         selectedProfile = profile
+        scanSummary = nil
+        scanProgress = nil
+        error = nil
+        leads = []
+        currentOffset = 0
+        hasMore = true
+        isScanning = false
+        
+        await fetchLeadsForSelectedProfile()
+    }
+    
+    /// Select a profile by id (e.g., after creation) and load its leads
+    func selectProfileAndLoad(profileId: UUID) async {
+        // Cancel any in-flight work
+        scanTask?.cancel()
+        scanTask = nil
+        fetchTask?.cancel()
+        fetchTask = nil
+        
+        // Find the profile in current list; if not present, refresh profiles first
+        if let found = profiles.first(where: { $0.id == profileId }) {
+            selectedProfile = found
+        } else {
+            do {
+                let fresh = try await keywordRepo.fetchProfiles()
+                profiles = fresh
+                selectedProfile = fresh.first(where: { $0.id == profileId }) ?? fresh.first(where: \.isActive) ?? fresh.first
+            } catch {
+                // If we cannot refresh, bail gracefully
+            }
+        }
+        
+        // Reset state and load
         scanSummary = nil
         scanProgress = nil
         error = nil
@@ -423,7 +466,7 @@ final class LeadFeedViewModel {
             let existingIds = Set(leads.map(\.id))
             let unique = more.filter { !existingIds.contains($0.id) }
             leads.append(contentsOf: unique)
-            currentOffset += more.count
+            currentOffset += more.count // must track server rows (not deduped count) for Supabase offset pagination
             hasMore = more.count == pageSize
         } catch {
             self.error = .from(error)
@@ -466,3 +509,7 @@ final class LeadFeedViewModel {
         }
     }
 }
+extension Notification.Name {
+    static let profileCreated = Notification.Name("ProfileCreatedNotification")
+}
+

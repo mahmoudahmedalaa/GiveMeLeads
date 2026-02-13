@@ -406,14 +406,17 @@ final class RedditSearchService: RedditSearchServiceProtocol {
         // Apply negative penalty
         overall = max(0, overall - negativePenalty)
         
+        // Map overall score from 0–100 to 0–10 for simpler presentation
+        let scoreOutOf10 = max(0, min(10, (overall + 5) / 10))
+        
         // HARD GATE: If NO product context AND NO keyword match AND score is just from
         // generic intent patterns, this is probably a personal advice post — reject.
         if productContextScore == 0 && matchedKeywords.isEmpty && intentScore < 40 {
             return nil
         }
         
-        // Quality gate — raised to 30 (from 20) for better signal-to-noise
-        guard overall >= 30 else { return nil }
+        // Quality gate at 3/10 (equivalent to previous 30/100)
+        guard scoreOutOf10 >= 3 else { return nil }
         
         let breakdown = ScoreBreakdown(intent: intentScore, urgency: urgencyScore, fit: fitScore)
         
@@ -431,7 +434,7 @@ final class RedditSearchService: RedditSearchServiceProtocol {
             matchedKeywords: matchedKeywords,
             matchedDescWords: matchedDescWords,
             isComment: isComment,
-            score: overall
+            score: Int(scoreOutOf10)
         )
         
         // ── Suggest Approach ──────────────────────────────────
@@ -442,7 +445,7 @@ final class RedditSearchService: RedditSearchServiceProtocol {
         )
         
         return LeadIntelligence(
-            score: overall,
+            score: scoreOutOf10,
             breakdown: breakdown,
             relevanceInsight: insight,
             matchingSnippet: snippet,
@@ -529,9 +532,9 @@ final class RedditSearchService: RedditSearchServiceProtocol {
         }
         
         // Strength indicator
-        if score >= 75 {
+        if score >= 7 {
             parts.append("which directly matches your offering")
-        } else if score >= 50 {
+        } else if score >= 5 {
             parts.append("which is relevant to what you offer")
         }
         

@@ -31,15 +31,15 @@ enum AppColors {
     static let accentBlue = Color(hex: "#3B82F6")
     
     // MARK: - Score Colors
-    static let scoreHigh   = Color(hex: "#10B981") // ≥80
-    static let scoreMedium = Color(hex: "#F59E0B") // 50-79
-    static let scoreLow    = Color(hex: "#6B7280") // <50
+    static let scoreHigh   = Color(hex: "#10B981") // ≥8
+    static let scoreMedium = Color(hex: "#F59E0B") // 5-7
+    static let scoreLow    = Color(hex: "#6B7280") // <5
     
     static func scoreColor(for score: Int) -> Color {
         switch score {
-        case 80...100: return scoreHigh
-        case 50..<80:  return scoreMedium
-        default:       return scoreLow
+        case 8...10:  return scoreHigh
+        case 5..<8:   return scoreMedium
+        default:      return scoreLow
         }
     }
     

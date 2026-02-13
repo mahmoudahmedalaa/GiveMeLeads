@@ -80,7 +80,7 @@ extension Lead {
         title: "Looking for a project management tool that handles dependencies and has a good mobile app",
         body: "Currently using Asana but it's too expensive for our small team. We need something that handles task dependencies well and has a decent mobile experience. Budget is under $50/user/month. Any recommendations?",
         url: "https://reddit.com/r/SaaS/comments/abc123",
-        score: 92,
+        score: 9,
         scoreBreakdown: ScoreBreakdown(intent: 95, urgency: 88, fit: 94),
         upvotes: 47,
         commentCount: 12,
@@ -100,7 +100,7 @@ extension Lead {
             title: "Can anyone recommend a CRM for small teams?",
             body: "We're a 5-person startup and need a CRM that doesn't cost a fortune.",
             url: "https://reddit.com/r/startup/comments/def456",
-            score: 67, scoreBreakdown: ScoreBreakdown(intent: 70, urgency: 55, fit: 75),
+            score: 7, scoreBreakdown: ScoreBreakdown(intent: 70, urgency: 55, fit: 75),
             upvotes: 23, commentCount: 8, status: .new,
             postedAt: Date().addingTimeInterval(-18000), discoveredAt: Date()
         ),
@@ -110,7 +110,7 @@ extension Lead {
             title: "How do you validate your B2B product idea with potential leads?",
             body: nil,
             url: "https://reddit.com/r/Entrepreneur/comments/ghi789",
-            score: 34, scoreBreakdown: ScoreBreakdown(intent: 30, urgency: 25, fit: 45),
+            score: 3, scoreBreakdown: ScoreBreakdown(intent: 30, urgency: 25, fit: 45),
             upvotes: 45, commentCount: 11, status: .new,
             postedAt: Date().addingTimeInterval(-28800), discoveredAt: Date()
         ),
