@@ -326,7 +326,7 @@ struct ProductSetupScreen: View {
             }
             
             VStack(spacing: AppSpacing.spacing3) {
-                PrimaryButton("💾 Save Profile") {
+                PrimaryButton("💾 Save Profile", isLoading: viewModel.isSaving) {
                     Task { await viewModel.confirmAndSave() }
                 }
                 

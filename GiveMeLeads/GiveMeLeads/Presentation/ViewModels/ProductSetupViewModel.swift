@@ -31,6 +31,7 @@ final class ProductSetupViewModel {
     var scanProgress: String = ""
     var scanElapsed: Int = 0
     var createdProfileId: UUID?
+    var isSaving = false
     
     // Internal
     private let keywordRepo: KeywordRepositoryProtocol
@@ -98,6 +99,10 @@ final class ProductSetupViewModel {
     
     /// Create profile + keywords ONLY (fast — 1-2 seconds). No scanning.
     func confirmAndSave() async {
+        guard !isSaving else { return }  // Prevent duplicate taps
+        isSaving = true
+        defer { isSaving = false }
+        
         // Check profile cap against current plan
         do {
             let existingProfiles = try await keywordRepo.fetchProfiles()

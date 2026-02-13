@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct LeadFeedScreen: View {
+    @Environment(AppRouter.self) private var router
     @State private var viewModel = LeadFeedViewModel()
     @State private var showScanResult = false
     @State private var showClearConfirm = false
@@ -296,7 +297,7 @@ struct LeadFeedScreen: View {
                     }
                 }
                 
-                ForEach(viewModel.leads) { lead in
+                ForEach(viewModel.visibleLeads) { lead in
                     NavigationLink(destination: LeadDetailScreen(
                         lead: lead,
                         onStatusChange: { newStatus in
@@ -331,8 +332,22 @@ struct LeadFeedScreen: View {
                     }
                     .buttonStyle(.plain)
                     .onAppear {
-                        if lead.id == viewModel.leads.last?.id {
+                        if lead.id == viewModel.visibleLeads.last?.id {
                             Task { await viewModel.loadMore() }
+                        }
+                    }
+                }
+                
+                // Upgrade banner + blurred cards when lead limit reached
+                if viewModel.isLeadLimitReached {
+                    UpgradeBanner(
+                        hiddenCount: viewModel.hiddenLeadCount,
+                        onUpgrade: { router.showPaywall = true }
+                    )
+                    
+                    ForEach(0..<min(3, viewModel.hiddenLeadCount), id: \.self) { _ in
+                        BlurredLeadCard {
+                            router.showPaywall = true
                         }
                     }
                 }

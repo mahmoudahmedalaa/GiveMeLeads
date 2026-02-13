@@ -23,6 +23,8 @@
 		5C97EC30F05DD068BAC74B7C /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F44D6991A3D05BA78E27A7C /* RootView.swift */; };
 		6BC67ADAFB772FDC2260E8B6 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 836D7BF115BDA78FD91A95A0 /* MainTabView.swift */; };
 		GA71NG5VC10053A8B4D21F01 /* GatingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = GA71NG5VC10053A8B4D21F02 /* GatingService.swift */; };
+		UB01BLUR0C10053A8B4D21F01 /* BlurredLeadCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = UB01BLUR0C10053A8B4D21F02 /* BlurredLeadCard.swift */; };
+		UB02UPGR0C10053A8B4D21F01 /* UpgradeBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = UB02UPGR0C10053A8B4D21F02 /* UpgradeBanner.swift */; };
 		6F5426A17693B1FD6F82F888 /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B3E1A53E2B808A27D9283EB /* EmptyStateView.swift */; };
 		72FE88DBC7B676701841BC72 /* ScoreBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA8C99B9D66415642A62824F /* ScoreBadge.swift */; };
 		7BD6C8C1CF3139F305D26F7E /* RedditSearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 865D48A831479A4F2C2BEB92 /* RedditSearchService.swift */; };
@@ -91,6 +93,8 @@
 		85DC1D8ACCD6B751BF961C38 /* ChipView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChipView.swift; sourceTree = "<group>"; };
 		865D48A831479A4F2C2BEB92 /* RedditSearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RedditSearchService.swift; sourceTree = "<group>"; };
 		GA71NG5VC10053A8B4D21F02 /* GatingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatingService.swift; sourceTree = "<group>"; };
+		UB01BLUR0C10053A8B4D21F02 /* BlurredLeadCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlurredLeadCard.swift; sourceTree = "<group>"; };
+		UB02UPGR0C10053A8B4D21F02 /* UpgradeBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpgradeBanner.swift; sourceTree = "<group>"; };
 		901DFA56ADB0BFE5CF310D19 /* GiveMeLeads.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GiveMeLeads.entitlements; sourceTree = "<group>"; };
 		9A51457E1E36F98C83BAB5AE /* AppColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppColors.swift; sourceTree = "<group>"; };
 		AAEFAA14C125873EA891EAD1 /* AIReply.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIReply.swift; sourceTree = "<group>"; };
@@ -298,6 +302,7 @@
 		825EAAAAEC0865FD864B53B2 /* LeadCard */ = {
 			isa = PBXGroup;
 			children = (
+				UB01BLUR0C10053A8B4D21F02 /* BlurredLeadCard.swift */,
 				FA02DA1C7591A215176AFE09 /* LeadCardView.swift */,
 			);
 			path = LeadCard;
@@ -382,6 +387,7 @@
 				C401DEED89F07E8F59ECABE2 /* Common */,
 				825EAAAAEC0865FD864B53B2 /* LeadCard */,
 				5DD54EBDCD7DF3A575C47669 /* ScoreBadge */,
+				UB02UPGR0C10053A8B4D21F02 /* UpgradeBanner.swift */,
 			);
 			path = Components;
 			sourceTree = "<group>";
@@ -548,6 +554,8 @@
 				E15B2C1DBCCCC3096C368697 /* KeywordViewModel.swift in Sources */,
 				FF10B5D89AAA2CB640A75601 /* Lead.swift in Sources */,
 				GA71NG5VC10053A8B4D21F01 /* GatingService.swift in Sources */,
+				UB01BLUR0C10053A8B4D21F01 /* BlurredLeadCard.swift in Sources */,
+				UB02UPGR0C10053A8B4D21F01 /* UpgradeBanner.swift in Sources */,
 				F5D1BCB59D7A23038B269DF2 /* LeadCardView.swift in Sources */,
 				C14227E1D26274C123EA6DE2 /* LeadDetailScreen.swift in Sources */,
 				0FF22FFE7E50E4AFB94A0861 /* LeadFeedScreen.swift in Sources */,
