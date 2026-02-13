@@ -98,6 +98,18 @@ final class ProductSetupViewModel {
     
     /// Create profile + keywords ONLY (fast — 1-2 seconds). No scanning.
     func confirmAndSave() async {
+        // Check profile cap against current plan
+        do {
+            let existingProfiles = try await keywordRepo.fetchProfiles()
+            let gate = await GatingService.shared.canCreateProfile(existingCount: existingProfiles.count)
+            if !gate.isAllowed {
+                error = gate.blockedReason ?? "Profile limit reached."
+                return
+            }
+        } catch {
+            // If we can't check, proceed — don't block on network errors
+        }
+        
         guard !suggestedKeywords.isEmpty else {
             error = "Add at least one keyword"
             return

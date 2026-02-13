@@ -22,6 +22,7 @@
 		5493F32B5007285C81A46103 /* ProductSetupViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF576DC0E2BC0DEC73749B62 /* ProductSetupViewModel.swift */; };
 		5C97EC30F05DD068BAC74B7C /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F44D6991A3D05BA78E27A7C /* RootView.swift */; };
 		6BC67ADAFB772FDC2260E8B6 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 836D7BF115BDA78FD91A95A0 /* MainTabView.swift */; };
+		GA71NG5VC10053A8B4D21F01 /* GatingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = GA71NG5VC10053A8B4D21F02 /* GatingService.swift */; };
 		6F5426A17693B1FD6F82F888 /* EmptyStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B3E1A53E2B808A27D9283EB /* EmptyStateView.swift */; };
 		72FE88DBC7B676701841BC72 /* ScoreBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA8C99B9D66415642A62824F /* ScoreBadge.swift */; };
 		7BD6C8C1CF3139F305D26F7E /* RedditSearchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 865D48A831479A4F2C2BEB92 /* RedditSearchService.swift */; };
@@ -89,6 +90,7 @@
 		845D86439E87E6E6E95C2014 /* TrackingProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrackingProfile.swift; sourceTree = "<group>"; };
 		85DC1D8ACCD6B751BF961C38 /* ChipView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChipView.swift; sourceTree = "<group>"; };
 		865D48A831479A4F2C2BEB92 /* RedditSearchService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RedditSearchService.swift; sourceTree = "<group>"; };
+		GA71NG5VC10053A8B4D21F02 /* GatingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GatingService.swift; sourceTree = "<group>"; };
 		901DFA56ADB0BFE5CF310D19 /* GiveMeLeads.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = GiveMeLeads.entitlements; sourceTree = "<group>"; };
 		9A51457E1E36F98C83BAB5AE /* AppColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppColors.swift; sourceTree = "<group>"; };
 		AAEFAA14C125873EA891EAD1 /* AIReply.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIReply.swift; sourceTree = "<group>"; };
@@ -339,6 +341,7 @@
 		9A347351A07E309F41E8DDCC /* Services */ = {
 			isa = PBXGroup;
 			children = (
+				GA71NG5VC10053A8B4D21F02 /* GatingService.swift */,
 				ED6EAD1B842D97A4CBEBF7C4 /* ProductAnalyzer.swift */,
 				0DBBFFF74818533AA0E87EDB /* RedditScanService.swift */,
 				865D48A831479A4F2C2BEB92 /* RedditSearchService.swift */,
@@ -544,6 +547,7 @@
 				FF5929364E9B46EF33D52B79 /* KeywordRepository.swift in Sources */,
 				E15B2C1DBCCCC3096C368697 /* KeywordViewModel.swift in Sources */,
 				FF10B5D89AAA2CB640A75601 /* Lead.swift in Sources */,
+				GA71NG5VC10053A8B4D21F01 /* GatingService.swift in Sources */,
 				F5D1BCB59D7A23038B269DF2 /* LeadCardView.swift in Sources */,
 				C14227E1D26274C123EA6DE2 /* LeadDetailScreen.swift in Sources */,
 				0FF22FFE7E50E4AFB94A0861 /* LeadFeedScreen.swift in Sources */,

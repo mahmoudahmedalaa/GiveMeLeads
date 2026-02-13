@@ -27,6 +27,23 @@ final class LeadFeedViewModel {
     /// User-facing error string for bindings that expect String?
     var errorMessage: String? { error?.userMessage }
     
+    // MARK: - Gated Properties
+    
+    private let gatingService = GatingService.shared
+    
+    /// Leads visible under the current plan cap
+    var visibleLeads: [Lead] {
+        Array(leads.prefix(gatingService.visibleLeadCount()))
+    }
+    
+    /// Number of leads hidden behind the paywall
+    var hiddenLeadCount: Int {
+        max(0, leads.count - gatingService.visibleLeadCount())
+    }
+    
+    /// Whether the lead limit has been reached
+    var isLeadLimitReached: Bool { hiddenLeadCount > 0 }
+    
     // MARK: - Private
     
     private let leadRepo: LeadRepositoryProtocol
@@ -230,6 +247,13 @@ final class LeadFeedViewModel {
             return
         }
         
+        // Daily scan limit check
+        let scanGate = gatingService.canScan()
+        if !scanGate.isAllowed {
+            error = .limitReached(scanGate.blockedReason ?? "Scan limit reached.")
+            return
+        }
+        
         // Cooldown check — prevent spamming Reddit
         if let lastScan = lastScanAtByProfile[profile.id] {
             let elapsed = Date().timeIntervalSince(lastScan)
@@ -368,8 +392,9 @@ final class LeadFeedViewModel {
                 }
             }
             
-            // Record cooldown timestamp
+            // Record cooldown timestamp + daily scan count
             lastScanAtByProfile[profile.id] = Date()
+            gatingService.recordScan()
             
             // Build rich summary
             var summaryParts: [String] = []
