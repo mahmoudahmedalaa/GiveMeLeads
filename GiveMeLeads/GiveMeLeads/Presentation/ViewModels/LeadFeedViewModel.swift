@@ -14,6 +14,7 @@ final class LeadFeedViewModel {
     var savedLeads: [Lead] = []
     var profiles: [TrackingProfile] = []
     var selectedProfile: TrackingProfile?
+    var showAllProfiles = false
     var isLoading = false
     var isRefreshing = false
     var isScanning = false
@@ -23,6 +24,15 @@ final class LeadFeedViewModel {
     var selectedLead: Lead?
     var hasLoadedOnce = false
     private(set) var hasMore = true
+    
+    /// Lead counts per profile (for badge display)
+    var leadCountByProfile: [UUID: Int] = [:]
+    
+    /// Total lead count across all profiles
+    var totalLeadCount: Int { leadCountByProfile.values.reduce(0, +) }
+    
+    /// Current status filter (nil = show all statuses, default = .new)
+    var statusFilter: LeadStatus? = .new
     
     /// User-facing error string for bindings that expect String?
     var errorMessage: String? { error?.userMessage }
@@ -69,11 +79,26 @@ final class LeadFeedViewModel {
         self.keywordRepo = keywordRepo
         self.redditSearch = redditSearch
         
-        // Observe profile creation events to auto-select and load the new profile
+        // Observe profile creation events — only auto-switch if this was the FIRST profile
         NotificationCenter.default.publisher(for: .profileCreated)
             .compactMap { $0.userInfo?["profileId"] as? UUID }
             .sink { [weak self] profileId in
-                Task { await self?.selectProfileAndLoad(profileId: profileId) }
+                Task {
+                    guard let self else { return }
+                    let hadProfiles = !self.profiles.isEmpty
+                    // Refresh profiles list to pick up the new one
+                    do {
+                        let fresh = try await self.keywordRepo.fetchProfiles()
+                        self.profiles = fresh
+                    } catch { /* keep cached */ }
+                    
+                    if !hadProfiles {
+                        // First profile ever — auto-select it
+                        await self.selectProfileAndLoad(profileId: profileId)
+                    }
+                    // Otherwise: keep current selection, pills updated
+                    await self.refreshLeadCounts()
+                }
             }
             .store(in: &cancellables)
     }
@@ -101,6 +126,9 @@ final class LeadFeedViewModel {
             if selectedProfile != nil {
                 await fetchLeadsForSelectedProfile()
             }
+            
+            // Fetch lead counts for all profiles
+            await refreshLeadCounts()
         } catch {
             self.error = .from(error)
         }
@@ -130,23 +158,52 @@ final class LeadFeedViewModel {
                     // Profile still exists — update it with fresh data (keyword count etc.)
                     selectedProfile = freshProfiles.first { $0.id == selected.id }
                 }
-            } else {
+            } else if !showAllProfiles {
                 // No profile selected — pick one
                 selectedProfile = freshProfiles.first(where: \.isActive) ?? freshProfiles.first
                 if selectedProfile != nil {
                     await fetchLeadsForSelectedProfile()
                 }
             }
+            
+            await refreshLeadCounts()
         } catch {
             // Silently fail — we already have cached profiles
         }
+    }
+    
+    // MARK: - Lead Count Badges
+    
+    /// Fetch lead counts for all profiles (for badge display on pills)
+    func refreshLeadCounts() async {
+        var counts: [UUID: Int] = [:]
+        for profile in profiles {
+            do {
+                let count = try await leadRepo.getLeadCount(profileId: profile.id, status: .new)
+                counts[profile.id] = count
+            } catch {
+                counts[profile.id] = 0
+            }
+        }
+        leadCountByProfile = counts
+    }
+    
+    // MARK: - Status Filter
+    
+    /// Switch the status filter and reload leads
+    func switchStatusFilter(_ status: LeadStatus?) async {
+        statusFilter = status
+        leads = []
+        currentOffset = 0
+        hasMore = true
+        await fetchLeadsForSelectedProfile()
     }
     
     // MARK: - Profile Switching
     
     /// Switch to a different profile — cancels in-flight work, clears old results, loads new
     func switchToProfile(_ profile: TrackingProfile) async {
-        guard profile.id != selectedProfile?.id else { return }
+        guard profile.id != selectedProfile?.id || showAllProfiles else { return }
         
         // Cancel any in-flight work
         scanTask?.cancel()
@@ -154,6 +211,7 @@ final class LeadFeedViewModel {
         fetchTask?.cancel()
         fetchTask = nil
         
+        showAllProfiles = false
         selectedProfile = profile
         scanSummary = nil
         scanProgress = nil
@@ -164,6 +222,35 @@ final class LeadFeedViewModel {
         isScanning = false
         
         await fetchLeadsForSelectedProfile()
+    }
+    
+    /// Switch to "All Profiles" view — shows leads across all profiles
+    func switchToAllProfiles() async {
+        guard !showAllProfiles else { return }
+        
+        // Cancel any in-flight work
+        scanTask?.cancel()
+        scanTask = nil
+        fetchTask?.cancel()
+        fetchTask = nil
+        
+        showAllProfiles = true
+        selectedProfile = nil
+        scanSummary = nil
+        scanProgress = nil
+        error = nil
+        leads = []
+        currentOffset = 0
+        hasMore = true
+        isScanning = false
+        
+        await fetchLeadsForSelectedProfile()
+    }
+    
+    /// Look up profile name by ID (for display on lead cards)
+    func profileName(for profileId: UUID?) -> String? {
+        guard let id = profileId else { return nil }
+        return profiles.first { $0.id == id }?.name
     }
     
     /// Select a profile by id (e.g., after creation) and load its leads
@@ -188,6 +275,7 @@ final class LeadFeedViewModel {
         }
         
         // Reset state and load
+        showAllProfiles = false
         scanSummary = nil
         scanProgress = nil
         error = nil
@@ -199,10 +287,8 @@ final class LeadFeedViewModel {
         await fetchLeadsForSelectedProfile()
     }
     
-    /// Clear all new leads for current profile
+    /// Clear all new leads for current profile (or all profiles in "All" mode)
     func clearResults() async {
-        guard let profile = selectedProfile else { return }
-        
         // Cancel any in-flight work
         scanTask?.cancel()
         scanTask = nil
@@ -210,11 +296,21 @@ final class LeadFeedViewModel {
         fetchTask = nil
         
         do {
-            try await leadRepo.clearLeadsForProfile(profileId: profile.id)
+            if showAllProfiles {
+                // Clear new leads for ALL profiles
+                for profile in profiles {
+                    try await leadRepo.clearLeadsForProfile(profileId: profile.id)
+                }
+            } else if let profile = selectedProfile {
+                try await leadRepo.clearLeadsForProfile(profileId: profile.id)
+            }
+            
             leads = []
             currentOffset = 0
             hasMore = true
             scanSummary = "Results cleared. Tap 🔍 to find new leads."
+            
+            await refreshLeadCounts()
         } catch {
             self.error = .from(error)
         }
@@ -228,40 +324,63 @@ final class LeadFeedViewModel {
         scanTask = Task { await performScan() }
     }
     
+    /// Scan all profiles sequentially (for "All" mode)
+    func scanAllProfiles() {
+        scanTask?.cancel()
+        scanTask = Task { await performScanAll() }
+    }
+    
+    /// Scan all profiles one by one
+    private func performScanAll() async {
+        guard !profiles.isEmpty else {
+            error = .invalidInput("No profiles to scan.")
+            return
+        }
+        
+        isScanning = true
+        scanSummary = nil
+        error = nil
+        defer { isScanning = false; scanProgress = nil }
+        
+        var totalSaved = 0
+        var totalDuplicates = 0
+        var scannedCount = 0
+        
+        for profile in profiles {
+            try? Task.checkCancellation()
+            if Task.isCancelled { break }
+            
+            scannedCount += 1
+            scanProgress = "Scanning \(profile.name) (\(scannedCount)/\(profiles.count))..."
+            
+            let (saved, dupes) = await performScanForProfile(profile)
+            totalSaved += saved
+            totalDuplicates += dupes
+        }
+        
+        // Build summary
+        var parts: [String] = []
+        if totalSaved > 0 {
+            parts.append("🎯 \(totalSaved) new lead\(totalSaved == 1 ? "" : "s") found!")
+        }
+        if totalDuplicates > 0 {
+            parts.append("\(totalDuplicates) duplicate\(totalDuplicates == 1 ? "" : "s") skipped")
+        }
+        if parts.isEmpty {
+            scanSummary = "No new leads right now across \(profiles.count) profiles."
+        } else {
+            scanSummary = parts.joined(separator: " · ")
+        }
+        
+        await fetchLeadsForSelectedProfile()
+        await refreshLeadCounts()
+    }
+    
     /// Core scan logic — runs in a Task, supports cancellation
     private func performScan() async {
         guard let profile = selectedProfile else {
             error = .invalidInput("No profile selected. Go to Profiles tab to create one.")
             return
-        }
-        
-        let keywords = profile.keywords?.map(\.keyword) ?? []
-        guard !keywords.isEmpty else {
-            error = .invalidInput("This profile has no keywords. Edit it to add some.")
-            return
-        }
-        
-        let subreddits = profile.subreddits.isEmpty ? ["all"] : profile.subreddits
-        guard !subreddits.isEmpty else {
-            error = .invalidInput("This profile has no subreddits. Edit it to add some.")
-            return
-        }
-        
-        // Daily scan limit check
-        let scanGate = gatingService.canScan()
-        if !scanGate.isAllowed {
-            error = .limitReached(scanGate.blockedReason ?? "Scan limit reached.")
-            return
-        }
-        
-        // Cooldown check — prevent spamming Reddit
-        if let lastScan = lastScanAtByProfile[profile.id] {
-            let elapsed = Date().timeIntervalSince(lastScan)
-            if elapsed < 60 {
-                let remaining = Int(60 - elapsed)
-                scanSummary = "⏳ Please wait \(remaining)s before scanning again."
-                return
-            }
         }
         
         isScanning = true
@@ -273,15 +392,58 @@ final class LeadFeedViewModel {
             isScanning = false
         }
         
+        let (saved, dupes) = await performScanForProfile(profile)
+        
+        // Build summary
+        if saved > 0 || dupes > 0 {
+            var parts: [String] = []
+            if saved > 0 { parts.append("🎯 \(saved) new lead\(saved == 1 ? "" : "s") found!") }
+            if dupes > 0 { parts.append("\(dupes) duplicate\(dupes == 1 ? "" : "s") skipped") }
+            scanSummary = parts.joined(separator: " · ")
+        } else {
+            scanSummary = "No new leads right now."
+        }
+        
+        await fetchLeadsForSelectedProfile()
+        await refreshLeadCounts()
+    }
+    
+    /// Scan a single profile and return (savedCount, duplicateCount)
+    private func performScanForProfile(_ profile: TrackingProfile) async -> (Int, Int) {
+        let keywords = profile.keywords?.map(\.keyword) ?? []
+        guard !keywords.isEmpty else { return (0, 0) }
+        
+        let subreddits = profile.subreddits.isEmpty ? ["all"] : profile.subreddits
+        guard !subreddits.isEmpty else { return (0, 0) }
+        
+        // Daily scan limit check
+        let scanGate = gatingService.canScan()
+        if !scanGate.isAllowed {
+            if case .blocked(let reason) = scanGate {
+                error = .limitReached(reason)
+            }
+            return (0, 0)
+        }
+        
+        // Cooldown check — prevent spamming Reddit
+        if let lastScan = lastScanAtByProfile[profile.id] {
+            let elapsed = Date().timeIntervalSince(lastScan)
+            if elapsed < 60 {
+                let remaining = Int(60 - elapsed)
+                scanSummary = "⏳ Please wait \(remaining)s before scanning \(profile.name) again."
+                return (0, 0)
+            }
+        }
+        
         do {
             guard let userId = try? await SupabaseManager.shared.client.auth.session.user.id else {
                 error = .authFailed("Not authenticated")
-                return
+                return (0, 0)
             }
             
             // Search posts
             try Task.checkCancellation()
-            scanProgress = "Searching Reddit posts..."
+            scanProgress = "Searching Reddit posts for \(profile.name)..."
             let posts = try await redditSearch.search(
                 keywords: keywords,
                 subreddits: subreddits,
@@ -290,7 +452,7 @@ final class LeadFeedViewModel {
             
             // Search comments
             try Task.checkCancellation()
-            scanProgress = "Searching Reddit comments..."
+            scanProgress = "Searching Reddit comments for \(profile.name)..."
             let comments = try await redditSearch.searchComments(
                 keywords: keywords,
                 subreddits: subreddits,
@@ -303,7 +465,6 @@ final class LeadFeedViewModel {
             
             var savedCount = 0
             var duplicateCount = 0
-            var failureCount = 0
             
             // Analyze and save posts
             for post in posts {
@@ -344,7 +505,6 @@ final class LeadFeedViewModel {
                         .execute()
                     savedCount += 1
                 } catch {
-                    // Duplicate key or other insert error
                     duplicateCount += 1
                 }
             }
@@ -396,49 +556,40 @@ final class LeadFeedViewModel {
             lastScanAtByProfile[profile.id] = Date()
             gatingService.recordScan()
             
-            // Build rich summary
-            var summaryParts: [String] = []
-            if savedCount > 0 {
-                summaryParts.append("🎯 \(savedCount) new lead\(savedCount == 1 ? "" : "s") found!")
-            }
-            if duplicateCount > 0 {
-                summaryParts.append("\(duplicateCount) duplicate\(duplicateCount == 1 ? "" : "s") skipped")
-            }
-            if summaryParts.isEmpty {
-                scanSummary = "No new leads right now. Searched \(posts.count) posts + \(comments.count) comments."
-            } else {
-                scanSummary = summaryParts.joined(separator: " · ")
-            }
-            
-            await fetchLeadsForSelectedProfile()
+            return (savedCount, duplicateCount)
             
         } catch is CancellationError {
-            scanSummary = "Scan cancelled."
+            return (0, 0)
         } catch {
             self.error = .from(error)
+            return (0, 0)
         }
     }
     
     // MARK: - Fetching
     
-    /// Fetch leads for the selected profile
+    /// Fetch leads for the selected profile (or all profiles)
     func fetchLeadsForSelectedProfile() async {
-        guard let profile = selectedProfile else {
-            isLoading = false
-            return
-        }
-        
         isLoading = leads.isEmpty
         error = nil
         defer { isLoading = false }
         
         do {
-            let fetched = try await leadRepo.fetchLeads(
-                profileId: profile.id,
-                status: .new,
-                limit: pageSize,
-                offset: 0
-            )
+            let fetched: [Lead]
+            if showAllProfiles {
+                // Fetch from all profiles
+                fetched = try await leadRepo.fetchLeads(status: statusFilter, limit: pageSize, offset: 0)
+            } else if let profile = selectedProfile {
+                fetched = try await leadRepo.fetchLeads(
+                    profileId: profile.id,
+                    status: statusFilter,
+                    limit: pageSize,
+                    offset: 0
+                )
+            } else {
+                leads = []
+                return
+            }
             leads = fetched
             currentOffset = fetched.count
             hasMore = fetched.count == pageSize
@@ -454,7 +605,7 @@ final class LeadFeedViewModel {
         defer { isLoading = false }
         
         do {
-            let fetched = try await leadRepo.fetchLeads(status: .new, limit: pageSize, offset: 0)
+            let fetched = try await leadRepo.fetchLeads(status: statusFilter, limit: pageSize, offset: 0)
             leads = fetched
             currentOffset = fetched.count
             hasMore = fetched.count == pageSize
@@ -474,24 +625,30 @@ final class LeadFeedViewModel {
     /// Load more leads (pagination)
     func loadMore() async {
         guard !isLoadingMore, hasMore else { return }
-        guard let profile = selectedProfile else { return }
         
         isLoadingMore = true
         defer { isLoadingMore = false }
         
         do {
-            let more = try await leadRepo.fetchLeads(
-                profileId: profile.id,
-                status: .new,
-                limit: pageSize,
-                offset: currentOffset
-            )
+            let more: [Lead]
+            if showAllProfiles {
+                more = try await leadRepo.fetchLeads(status: statusFilter, limit: pageSize, offset: currentOffset)
+            } else if let profile = selectedProfile {
+                more = try await leadRepo.fetchLeads(
+                    profileId: profile.id,
+                    status: statusFilter,
+                    limit: pageSize,
+                    offset: currentOffset
+                )
+            } else {
+                return
+            }
             
             // Deduplicate by id
             let existingIds = Set(leads.map(\.id))
             let unique = more.filter { !existingIds.contains($0.id) }
             leads.append(contentsOf: unique)
-            currentOffset += more.count // must track server rows (not deduped count) for Supabase offset pagination
+            currentOffset += more.count
             hasMore = more.count == pageSize
         } catch {
             self.error = .from(error)
@@ -504,6 +661,10 @@ final class LeadFeedViewModel {
         do {
             try await leadRepo.updateLeadStatus(leadId: lead.id, status: .saved)
             leads.removeAll { $0.id == lead.id }
+            // Update lead counts
+            if let profileId = lead.profileId {
+                leadCountByProfile[profileId] = max(0, (leadCountByProfile[profileId] ?? 1) - 1)
+            }
         } catch {
             self.error = .from(error)
         }
@@ -513,6 +674,10 @@ final class LeadFeedViewModel {
         do {
             try await leadRepo.updateLeadStatus(leadId: lead.id, status: .dismissed)
             leads.removeAll { $0.id == lead.id }
+            // Update lead counts
+            if let profileId = lead.profileId {
+                leadCountByProfile[profileId] = max(0, (leadCountByProfile[profileId] ?? 1) - 1)
+            }
         } catch {
             self.error = .from(error)
         }
@@ -521,6 +686,31 @@ final class LeadFeedViewModel {
     func markContacted(_ lead: Lead) async {
         do {
             try await leadRepo.updateLeadStatus(leadId: lead.id, status: .contacted)
+            leads.removeAll { $0.id == lead.id }
+        } catch {
+            self.error = .from(error)
+        }
+    }
+    
+    /// Move a saved/contacted lead back to "new" status
+    func unsaveLead(_ lead: Lead) async {
+        do {
+            try await leadRepo.updateLeadStatus(leadId: lead.id, status: .new)
+            leads.removeAll { $0.id == lead.id }
+            // Increment new count for this profile
+            if let profileId = lead.profileId {
+                leadCountByProfile[profileId] = (leadCountByProfile[profileId] ?? 0) + 1
+            }
+        } catch {
+            self.error = .from(error)
+        }
+    }
+    
+    /// Permanently delete a lead from the database
+    func deleteLead(_ lead: Lead) async {
+        do {
+            try await leadRepo.deleteLead(leadId: lead.id)
+            leads.removeAll { $0.id == lead.id }
         } catch {
             self.error = .from(error)
         }
@@ -537,4 +727,3 @@ final class LeadFeedViewModel {
 extension Notification.Name {
     static let profileCreated = Notification.Name("ProfileCreatedNotification")
 }
-

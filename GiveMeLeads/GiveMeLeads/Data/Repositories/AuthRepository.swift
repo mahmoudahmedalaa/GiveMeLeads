@@ -17,11 +17,19 @@ final class AuthRepository: AuthRepositoryProtocol {
         return profile
     }
     
-    func sendMagicLink(email: String) async throws {
+    func sendOTP(email: String) async throws {
         try await client.auth.signInWithOTP(
-            email: email,
-            redirectTo: URL(string: "givemeleads://auth/callback")
+            email: email
         )
+    }
+    
+    func verifyOTP(email: String, code: String) async throws -> UserProfile? {
+        let session = try await client.auth.verifyOTP(
+            email: email,
+            token: code,
+            type: .email
+        )
+        return try await fetchUserProfile(userId: session.user.id)
     }
     
     func getCurrentSession() async throws -> UserProfile? {

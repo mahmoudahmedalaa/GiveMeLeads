@@ -6,8 +6,10 @@ struct ProductSetupScreen: View {
     @State private var viewModel = ProductSetupViewModel()
     @State private var newKeywordInput = ""
     @State private var newSubredditInput = ""
+    @StateObject private var subredditSearch = SubredditSearchService()
     
     var isModal: Bool = false
+    var onSkip: (() -> Void)? = nil
     var onComplete: () -> Void
     
     var body: some View {
@@ -16,17 +18,23 @@ struct ProductSetupScreen: View {
             
             ScrollView {
                 VStack(spacing: AppSpacing.spacing6) {
-                    if isModal {
-                        HStack {
-                            Spacer()
+                    HStack {
+                        Spacer()
+                        if isModal {
                             Button(action: { dismiss() }) {
                                 Image(systemName: "xmark.circle.fill")
                                     .font(.system(size: 28))
                                     .foregroundColor(AppColors.textTertiary)
                             }
+                        } else if let onSkip = onSkip {
+                            Button(action: onSkip) {
+                                Text("Skip for Now")
+                                    .font(AppTypography.bodyMedium)
+                                    .foregroundColor(AppColors.textSecondary)
+                            }
                         }
-                        .padding(.top, AppSpacing.spacing2)
                     }
+                    .padding(.top, AppSpacing.spacing2)
                     
                     headerSection
                     
@@ -278,27 +286,86 @@ struct ProductSetupScreen: View {
                 }
                 
                 HStack(spacing: AppSpacing.spacing2) {
-                    TextField("Add subreddit...", text: $newSubredditInput)
+                    TextField("Search subreddits...", text: $newSubredditInput)
                         .font(AppTypography.bodySmall)
                         .foregroundColor(AppColors.textPrimary)
                         .padding(.horizontal, AppSpacing.spacing3)
                         .padding(.vertical, AppSpacing.spacing2)
                         .background(AppColors.bg700)
                         .clipShape(RoundedRectangle(cornerRadius: AppRadius.sm))
+                        .onChange(of: newSubredditInput) { _, newValue in
+                            subredditSearch.search(query: newValue)
+                        }
                         .onSubmit {
-                            viewModel.addSubreddit(newSubredditInput)
-                            newSubredditInput = ""
+                            if let first = subredditSearch.suggestions.first {
+                                viewModel.addSubreddit(first.name)
+                                newSubredditInput = ""
+                                subredditSearch.clear()
+                            }
                         }
                     
-                    Button(action: {
-                        viewModel.addSubreddit(newSubredditInput)
-                        newSubredditInput = ""
-                    }) {
-                        Image(systemName: "plus.circle.fill")
-                            .foregroundStyle(AppColors.primaryGradient)
-                            .font(.system(size: 24))
+                    if subredditSearch.isSearching {
+                        ProgressView()
+                            .tint(AppColors.primary400)
+                            .frame(width: 24, height: 24)
                     }
-                    .disabled(newSubredditInput.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+                
+                // Autocomplete dropdown
+                if !subredditSearch.suggestions.isEmpty {
+                    VStack(spacing: 0) {
+                        ForEach(subredditSearch.suggestions) { suggestion in
+                            Button(action: {
+                                viewModel.addSubreddit(suggestion.name)
+                                newSubredditInput = ""
+                                subredditSearch.clear()
+                            }) {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text("r/\(suggestion.name)")
+                                            .font(AppTypography.bodySmall)
+                                            .fontWeight(.medium)
+                                            .foregroundColor(AppColors.textPrimary)
+                                        if !suggestion.description.isEmpty {
+                                            Text(suggestion.description)
+                                                .font(AppTypography.caption)
+                                                .foregroundColor(AppColors.textTertiary)
+                                                .lineLimit(1)
+                                        }
+                                    }
+                                    Spacer()
+                                    Text("\(suggestion.formattedSubscribers) members")
+                                        .font(AppTypography.caption)
+                                        .foregroundColor(AppColors.textTertiary)
+                                }
+                                .padding(.horizontal, AppSpacing.spacing3)
+                                .padding(.vertical, AppSpacing.spacing2)
+                            }
+                            .buttonStyle(.plain)
+                            
+                            if suggestion.id != subredditSearch.suggestions.last?.id {
+                                Divider().overlay(AppColors.bg600.opacity(0.5))
+                            }
+                        }
+                    }
+                    .background(AppColors.bg700)
+                    .clipShape(RoundedRectangle(cornerRadius: AppRadius.sm))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AppRadius.sm)
+                            .stroke(AppColors.primary400.opacity(0.3), lineWidth: 1)
+                    )
+                } else if subredditSearch.noResults && !newSubredditInput.isEmpty {
+                    HStack {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(AppColors.textTertiary)
+                        Text("No subreddits found for \"\(newSubredditInput)\"")
+                            .font(AppTypography.caption)
+                            .foregroundColor(AppColors.textTertiary)
+                    }
+                    .padding(AppSpacing.spacing3)
+                    .frame(maxWidth: .infinity)
+                    .background(AppColors.bg700)
+                    .clipShape(RoundedRectangle(cornerRadius: AppRadius.sm))
                 }
             }
             .padding(AppSpacing.spacing4)

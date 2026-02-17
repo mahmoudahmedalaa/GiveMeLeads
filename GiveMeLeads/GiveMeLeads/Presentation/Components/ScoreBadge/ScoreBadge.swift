@@ -81,9 +81,9 @@ struct ScoreBreakdownView: View {
     
     var body: some View {
         HStack(spacing: AppSpacing.spacing4) {
-            ScoreChip(label: "Intent", value: breakdown.intent, color: AppColors.scoreHigh)
-            ScoreChip(label: "Urgency", value: breakdown.urgency, color: AppColors.warning)
-            ScoreChip(label: "Fit", value: breakdown.fit, color: AppColors.accentCyan)
+            ScoreChip(label: "Intent", value: breakdown.intentDisplay, color: AppColors.scoreHigh)
+            ScoreChip(label: "Urgency", value: breakdown.urgencyDisplay, color: AppColors.warning)
+            ScoreChip(label: "Fit", value: breakdown.fitDisplay, color: AppColors.accentCyan)
         }
     }
 }
@@ -98,7 +98,7 @@ struct ScoreChip: View {
             Circle()
                 .fill(color)
                 .frame(width: 6, height: 6)
-            Text("\(label): \(value)%")
+            Text("\(label): \(value)/10")
                 .font(AppTypography.bodySmall)
                 .foregroundColor(AppColors.textSecondary)
         }
@@ -114,7 +114,7 @@ struct ScoreChip: View {
         ScoreBadge(score: 9, size: .large)
         ScoreBadge(score: 7, size: .small)
         ScoreBadge(score: 3, size: .small)
-        ScoreBreakdownView(breakdown: ScoreBreakdown(intent: 95, urgency: 88, fit: 94))
+        ScoreBreakdownView(breakdown: ScoreBreakdown(intent: 9, urgency: 8, fit: 9))
     }
     .padding()
     .background(AppColors.background)

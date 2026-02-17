@@ -1,16 +1,9 @@
 import SwiftUI
+import UIKit
 
-// MARK: - Display helpers for Entitlements / Plan
+// MARK: - Display helpers for Plan
 
 extension Plan {
-    var displayName: String {
-        switch self {
-        case .free: "Free"
-        case .starter: "Starter"
-        case .pro: "Pro"
-        }
-    }
-    
     var monthlyPrice: String {
         switch self {
         case .free: "$0"
@@ -56,14 +49,13 @@ private struct FeatureRow: Identifiable {
 }
 
 private let featureRows: [FeatureRow] = [
-    FeatureRow(icon: "person.2",       label: "Profiles",       free: "1",     starter: "5",         pro: "20"),
-    FeatureRow(icon: "magnifyingglass",label: "Daily scans",    free: "1",     starter: "10",        pro: "100"),
-    FeatureRow(icon: "eye",            label: "Visible leads",  free: "5",     starter: "500",       pro: "5,000"),
-    FeatureRow(icon: "text.word.spacing", label: "Keywords",    free: "5",     starter: "100",       pro: "1,000"),
-    FeatureRow(icon: "square.and.arrow.up", label: "CSV export", free: "—",   starter: "✓",         pro: "✓"),
-    FeatureRow(icon: "bell.badge",     label: "Alerts",         free: "—",     starter: "✓",         pro: "✓"),
-    FeatureRow(icon: "bookmark",       label: "Saved searches", free: "—",     starter: "—",         pro: "✓"),
-    FeatureRow(icon: "link",           label: "Webhooks",       free: "—",     starter: "—",         pro: "✓"),
+    FeatureRow(icon: "person.2",          label: "Profiles",          free: "1",    starter: "3",     pro: "10"),
+    FeatureRow(icon: "magnifyingglass",   label: "Daily scans",       free: "3",    starter: "15",    pro: "∞"),
+    FeatureRow(icon: "text.word.spacing", label: "Keywords",          free: "5",    starter: "30",    pro: "∞"),
+    FeatureRow(icon: "sparkles",          label: "AI Replies",        free: "3/day",starter: "20/day",pro: "∞"),
+    FeatureRow(icon: "bubble.left.and.bubble.right", label: "Comment insights", free: "—", starter: "✓", pro: "✓"),
+    FeatureRow(icon: "square.and.arrow.up",label: "CSV export",       free: "—",    starter: "✓",     pro: "✓"),
+    FeatureRow(icon: "headphones",        label: "Priority support",  free: "—",    starter: "—",     pro: "✓"),
 ]
 
 // MARK: - PaywallScreen
@@ -72,6 +64,8 @@ struct PaywallScreen: View {
     @Environment(\.dismiss) private var dismiss
     @State private var selectedPlan: Plan = .pro
     @State private var isLoading = false
+    @State private var showComingSoon = false
+    @State private var showRestoreMessage = false
     
     private let currentPlan = GatingService.shared.currentPlan
     
@@ -304,12 +298,7 @@ struct PaywallScreen: View {
                     "Start 7-Day Free Trial — \(selectedPlan.displayName)",
                     isLoading: isLoading
                 ) {
-                    // TODO: Integrate StoreKit 2
-                    isLoading = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-                        isLoading = false
-                        dismiss()
-                    }
+                    showComingSoon = true
                 }
                 
                 Text("Then \(selectedPlan.monthlyPrice)\(selectedPlan.priceSubtitle) · Cancel anytime")
@@ -319,20 +308,36 @@ struct PaywallScreen: View {
             
             HStack(spacing: AppSpacing.spacing4) {
                 GhostButton("Privacy Policy") {
-                    // TODO: Open privacy policy
+                    openURL(AppConfig.privacyPolicyURL)
                 }
                 Text("·").foregroundColor(AppColors.textTertiary)
                 GhostButton("Terms of Use") {
-                    // TODO: Open terms
+                    openURL(AppConfig.termsOfServiceURL)
                 }
                 Text("·").foregroundColor(AppColors.textTertiary)
                 GhostButton("Restore") {
-                    // TODO: Restore purchases
+                    showRestoreMessage = true
                 }
             }
             .font(AppTypography.bodySmall)
         }
         .padding(.top, AppSpacing.spacing2)
+        .alert("Coming Soon", isPresented: $showComingSoon) {
+            Button("OK") {}
+        } message: {
+            Text("Subscriptions will be available soon. You're currently enjoying the free plan.")
+        }
+        .alert("Restore Purchases", isPresented: $showRestoreMessage) {
+            Button("OK") {}
+        } message: {
+            Text("Purchase restoration will be available when subscriptions launch. Stay tuned!")
+        }
+    }
+    
+    private func openURL(_ urlString: String) {
+        if let url = URL(string: urlString) {
+            UIApplication.shared.open(url)
+        }
     }
 }
 

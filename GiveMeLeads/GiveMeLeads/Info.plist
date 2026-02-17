@@ -13,5 +13,7 @@
             <string>com.givemeleads.auth</string>
         </dict>
     </array>
+    <key>ITSAppUsesNonExemptEncryption</key>
+    <false/>
 </dict>
 </plist>

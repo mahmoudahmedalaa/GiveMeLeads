@@ -1,11 +1,21 @@
 import SwiftUI
 
-/// A card displaying a Reddit lead with actionable intelligence
+/// Context-aware card actions per lead status
+enum LeadCardAction {
+    case save       // New → Saved
+    case unsave     // Saved → New
+    case dismiss    // New → Dismissed
+    case delete     // Permanent delete
+    case reply      // Generate AI reply
+    case contacted  // Mark as contacted
+}
+
+/// A card displaying a Reddit lead with actionable intelligence.
+/// Actions adapt based on the lead's current status.
 struct LeadCardView: View {
     let lead: Lead
-    let onSave: () -> Void
-    let onDismiss: () -> Void
-    let onReply: () -> Void
+    var profileName: String? = nil
+    let actions: (LeadCardAction) -> Void
     let onTap: () -> Void
     
     var body: some View {
@@ -34,7 +44,37 @@ struct LeadCardView: View {
                         .clipShape(Capsule())
                 }
                 
+                if let name = profileName {
+                    Text(name)
+                        .font(AppTypography.caption)
+                        .foregroundColor(AppColors.textSecondary)
+                        .padding(.horizontal, AppSpacing.spacing2)
+                        .padding(.vertical, 2)
+                        .background(AppColors.bg800)
+                        .clipShape(Capsule())
+                        .lineLimit(1)
+                }
+                
                 Spacer()
+                
+                // Status badge for non-new leads
+                if lead.status == .saved {
+                    Text("Saved")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(AppColors.success)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(AppColors.success.opacity(0.15))
+                        .clipShape(Capsule())
+                } else if lead.status == .contacted {
+                    Text("Contacted")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundColor(AppColors.accentCyan)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(AppColors.accentCyan.opacity(0.15))
+                        .clipShape(Capsule())
+                }
                 
                 Text(lead.postedAt.timeAgoDisplay())
                     .font(AppTypography.bodySmall)
@@ -47,7 +87,7 @@ struct LeadCardView: View {
                 .foregroundColor(AppColors.textPrimary)
                 .lineLimit(2)
             
-            // ★ KEY INSIGHT — why this lead matters (the most important part)
+            // ★ KEY INSIGHT — why this lead matters
             if let insight = lead.relevanceInsight {
                 HStack(alignment: .top, spacing: 6) {
                     Image(systemName: "sparkle")
@@ -80,7 +120,7 @@ struct LeadCardView: View {
                 .padding(.vertical, AppSpacing.spacing2)
             }
             
-            // Bottom row: Author + Quick actions
+            // Bottom row: Author + Context-aware actions
             HStack {
                 Text("u/\(lead.author)")
                     .font(AppTypography.bodySmall)
@@ -95,37 +135,30 @@ struct LeadCardView: View {
                 .font(AppTypography.bodySmall)
                 .foregroundColor(AppColors.textTertiary)
                 
-                // Quick action buttons
+                // Context-aware action buttons
                 HStack(spacing: AppSpacing.spacing2) {
-                    Button(action: onSave) {
-                        Image(systemName: "bookmark")
-                            .font(.system(size: 14))
-                            .foregroundColor(AppColors.success)
-                            .padding(6)
-                            .background(AppColors.success.opacity(0.1))
-                            .clipShape(Circle())
+                    switch lead.status {
+                    case .new:
+                        // New leads: Save / Reply / Dismiss
+                        actionButton(icon: "bookmark", color: AppColors.success) { actions(.save) }
+                        actionButton(icon: "sparkles", color: AppColors.primary400) { actions(.reply) }
+                        actionButton(icon: "xmark", color: AppColors.error, iconSize: 12) { actions(.dismiss) }
+                        
+                    case .saved:
+                        // Saved leads: Reply / Contacted / Unsave / Delete
+                        actionButton(icon: "sparkles", color: AppColors.primary400) { actions(.reply) }
+                        actionButton(icon: "envelope", color: AppColors.accentCyan) { actions(.contacted) }
+                        actionButton(icon: "bookmark.slash", color: AppColors.warning) { actions(.unsave) }
+                        actionButton(icon: "trash", color: AppColors.error, iconSize: 12) { actions(.delete) }
+                        
+                    case .contacted:
+                        // Contacted leads: Reply / Delete
+                        actionButton(icon: "sparkles", color: AppColors.primary400) { actions(.reply) }
+                        actionButton(icon: "trash", color: AppColors.error, iconSize: 12) { actions(.delete) }
+                        
+                    default:
+                        EmptyView()
                     }
-                    .buttonStyle(.plain)
-                    
-                    Button(action: onReply) {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 14))
-                            .foregroundColor(AppColors.primary400)
-                            .padding(6)
-                            .background(AppColors.primary400.opacity(0.1))
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
-                    
-                    Button(action: onDismiss) {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 12))
-                            .foregroundColor(AppColors.error)
-                            .padding(6)
-                            .background(AppColors.error.opacity(0.1))
-                            .clipShape(Circle())
-                    }
-                    .buttonStyle(.plain)
                 }
                 .padding(.leading, AppSpacing.spacing2)
             }
@@ -138,6 +171,18 @@ struct LeadCardView: View {
                 .stroke(leadBorderGradient, lineWidth: 1)
         )
         .shadow(color: Color.black.opacity(0.3), radius: 8, x: 0, y: 2)
+    }
+    
+    private func actionButton(icon: String, color: Color, iconSize: CGFloat = 14, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: iconSize))
+                .foregroundColor(color)
+                .padding(6)
+                .background(color.opacity(0.1))
+                .clipShape(Circle())
+        }
+        .buttonStyle(.plain)
     }
     
     private var leadBorderGradient: some ShapeStyle {
@@ -193,9 +238,7 @@ struct MiniScoreIndicator: View {
             ForEach(Lead.samples) { lead in
                 LeadCardView(
                     lead: lead,
-                    onSave: {},
-                    onDismiss: {},
-                    onReply: {},
+                    actions: { _ in },
                     onTap: {}
                 )
             }

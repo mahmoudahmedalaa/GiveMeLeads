@@ -6,6 +6,7 @@ protocol RedditSearchServiceProtocol {
     func searchComments(keywords: [String], subreddits: [String], limit: Int) async throws -> [RedditSearchService.RedditComment]
     func analyzePost(_ post: RedditSearchService.RedditPost, keywords: [String], productDescription: String) -> RedditSearchService.LeadIntelligence?
     func analyzeComment(_ comment: RedditSearchService.RedditComment, keywords: [String], productDescription: String) -> RedditSearchService.LeadIntelligence?
+    func fetchTopComments(postId: String, subreddit: String, limit: Int) async throws -> [RedditSearchService.PostComment]
 }
 
 
@@ -13,8 +14,10 @@ protocol RedditSearchServiceProtocol {
 protocol AuthRepositoryProtocol {
     /// Sign in with Apple using identity token
     func signInWithApple(idToken: String, nonce: String) async throws -> UserProfile
-    /// Send a magic link to the given email
-    func sendMagicLink(email: String) async throws
+    /// Send an OTP code to the given email
+    func sendOTP(email: String) async throws
+    /// Verify OTP code and create session
+    func verifyOTP(email: String, code: String) async throws -> UserProfile?
     /// Get current session, nil if not authenticated
     func getCurrentSession() async throws -> UserProfile?
     /// Sign out the current user
@@ -37,6 +40,10 @@ protocol LeadRepositoryProtocol {
     func getLeadCount(status: LeadStatus?) async throws -> Int
     /// Clear all leads for a specific profile
     func clearLeadsForProfile(profileId: UUID) async throws
+    /// Get lead count for a specific profile
+    func getLeadCount(profileId: UUID, status: LeadStatus?) async throws -> Int
+    /// Permanently delete a lead
+    func deleteLead(leadId: UUID) async throws
 }
 
 /// Protocol for keyword/profile operations

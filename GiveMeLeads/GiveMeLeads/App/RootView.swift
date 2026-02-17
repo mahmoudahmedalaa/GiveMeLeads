@@ -2,6 +2,7 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(AppRouter.self) private var router
+    @State private var authViewModel: AuthViewModel?
     
     var body: some View {
         Group {
@@ -10,8 +11,14 @@ struct RootView: View {
                 SplashView()
             case .unauthenticated:
                 WelcomeScreen()
+            case .needsOnboarding:
+                OnboardingScreen {
+                    router.onboardingComplete()
+                }
             case .needsSetup:
-                ProductSetupScreen(isModal: false) {
+                ProductSetupScreen(isModal: false, onSkip: {
+                    router.skipSetup()
+                }) {
                     router.setupComplete()
                 }
             case .authenticated:
@@ -20,9 +27,11 @@ struct RootView: View {
         }
         .animation(.easeInOut(duration: 0.3), value: router.authState)
         .task {
-            // Check for existing session on app launch
-            let authVM = AuthViewModel(router: router)
-            await authVM.checkSession()
+            // Reuse the same AuthViewModel instance across re-renders
+            if authViewModel == nil {
+                authViewModel = AuthViewModel(router: router)
+            }
+            await authViewModel?.checkSession()
         }
     }
 }

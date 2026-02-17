@@ -15,11 +15,16 @@ struct LeadFeedScreen: View {
                     .ignoresSafeArea()
                 
                 VStack(spacing: 0) {
-                    // Profile Selector (only when multiple profiles)
+                    // Profile Selector (always visible when multiple profiles)
                     if viewModel.profiles.count > 1 {
                         profileSelector
                     } else if let profile = viewModel.selectedProfile {
                         singleProfileHeader(profile)
+                    }
+                    
+                    // Status filter tabs
+                    if !viewModel.profiles.isEmpty {
+                        statusFilterBar
                     }
                     
                     // Content
@@ -53,16 +58,41 @@ struct LeadFeedScreen: View {
                 }
                 // Scan button
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(action: { triggerScan() }) {
-                        if viewModel.isScanning {
-                            ProgressView()
-                                .tint(AppColors.primary400)
-                        } else {
-                            Image(systemName: "antenna.radiowaves.left.and.right")
+                    if viewModel.showAllProfiles {
+                        // Scan All button in All mode
+                        Button(action: { viewModel.scanAllProfiles() }) {
+                            if viewModel.isScanning {
+                                ProgressView()
+                                    .tint(AppColors.primary400)
+                            } else {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "antenna.radiowaves.left.and.right")
+                                    Text("Scan All")
+                                        .font(AppTypography.caption)
+                                }
                                 .foregroundColor(AppColors.primary400)
+                            }
                         }
+                        .disabled(viewModel.isScanning || viewModel.profiles.isEmpty)
+                    } else {
+                        Button(action: { triggerScan() }) {
+                            if viewModel.isScanning {
+                                ProgressView()
+                                    .tint(AppColors.primary400)
+                            } else {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "antenna.radiowaves.left.and.right")
+                                    if let name = viewModel.selectedProfile?.name {
+                                        Text(name)
+                                            .font(AppTypography.caption)
+                                            .lineLimit(1)
+                                    }
+                                }
+                                .foregroundColor(AppColors.primary400)
+                            }
+                        }
+                        .disabled(viewModel.isScanning || viewModel.selectedProfile == nil)
                     }
-                    .disabled(viewModel.isScanning || viewModel.selectedProfile == nil)
                 }
             }
             .refreshable {
@@ -104,7 +134,11 @@ struct LeadFeedScreen: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("This will remove all unsaved leads for this profile. Saved leads won't be affected.")
+                if viewModel.showAllProfiles {
+                    Text("This will remove all unsaved leads across all profiles. Saved leads won't be affected.")
+                } else {
+                    Text("This will remove all unsaved leads for this profile. Saved leads won't be affected.")
+                }
             }
             .sheet(isPresented: $showReplySheet) {
                 if let lead = replyLead {
@@ -124,33 +158,24 @@ struct LeadFeedScreen: View {
     private var profileSelector: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: AppSpacing.spacing2) {
+                // "All" pill
+                profilePill(
+                    label: "All",
+                    icon: "square.grid.2x2",
+                    count: viewModel.totalLeadCount,
+                    isSelected: viewModel.showAllProfiles
+                ) {
+                    Task { await viewModel.switchToAllProfiles() }
+                }
+                
                 ForEach(viewModel.profiles) { profile in
-                    Button(action: {
+                    profilePill(
+                        label: profile.name,
+                        icon: nil,
+                        count: viewModel.leadCountByProfile[profile.id] ?? 0,
+                        isSelected: !viewModel.showAllProfiles && profile.id == viewModel.selectedProfile?.id
+                    ) {
                         Task { await viewModel.switchToProfile(profile) }
-                    }) {
-                        HStack(spacing: 6) {
-                            Circle()
-                                .fill(profile.id == viewModel.selectedProfile?.id
-                                      ? AppColors.primary400
-                                      : AppColors.textTertiary.opacity(0.3))
-                                .frame(width: 8, height: 8)
-                            
-                            Text(profile.name)
-                                .font(AppTypography.buttonMedium)
-                                .foregroundColor(
-                                    profile.id == viewModel.selectedProfile?.id
-                                    ? .white
-                                    : AppColors.textSecondary
-                                )
-                        }
-                        .padding(.horizontal, AppSpacing.spacing4)
-                        .padding(.vertical, AppSpacing.spacing2)
-                        .background(
-                            profile.id == viewModel.selectedProfile?.id
-                            ? AnyShapeStyle(AppColors.primaryGradient)
-                            : AnyShapeStyle(AppColors.bg700)
-                        )
-                        .clipShape(Capsule())
                     }
                 }
             }
@@ -158,6 +183,82 @@ struct LeadFeedScreen: View {
             .padding(.vertical, AppSpacing.spacing3)
         }
         .background(AppColors.bg800.opacity(0.5))
+    }
+    
+    /// Reusable profile pill with optional count badge
+    private func profilePill(label: String, icon: String?, count: Int, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                if let icon {
+                    Image(systemName: icon)
+                        .font(.system(size: 10))
+                } else {
+                    Circle()
+                        .fill(isSelected ? Color.white.opacity(0.8) : AppColors.textTertiary.opacity(0.3))
+                        .frame(width: 8, height: 8)
+                }
+                
+                Text(label)
+                    .font(AppTypography.buttonMedium)
+                    .lineLimit(1)
+                
+                if count > 0 {
+                    Text("\(count)")
+                        .font(.system(size: 10, weight: .bold, design: .rounded))
+                        .foregroundColor(isSelected ? AppColors.primary600 : .white)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(
+                            isSelected
+                                ? Color.white.opacity(0.9)
+                                : AppColors.primary500.opacity(0.8)
+                        )
+                        .clipShape(Capsule())
+                }
+            }
+            .foregroundColor(isSelected ? .white : AppColors.textSecondary)
+            .padding(.horizontal, AppSpacing.spacing4)
+            .padding(.vertical, AppSpacing.spacing2)
+            .background(
+                isSelected
+                ? AnyShapeStyle(AppColors.primaryGradient)
+                : AnyShapeStyle(AppColors.bg700)
+            )
+            .clipShape(Capsule())
+        }
+    }
+    
+    // MARK: - Status Filter Bar
+    
+    private var statusFilterBar: some View {
+        HStack(spacing: 0) {
+            statusTab("New", status: .new)
+            statusTab("Saved", status: .saved)
+            statusTab("Contacted", status: .contacted)
+        }
+        .background(AppColors.bg700.opacity(0.5))
+    }
+    
+    private func statusTab(_ label: String, status: LeadStatus) -> some View {
+        Button {
+            Task { await viewModel.switchStatusFilter(status) }
+        } label: {
+            VStack(spacing: 6) {
+                Text(label)
+                    .font(AppTypography.buttonMedium)
+                    .foregroundColor(
+                        viewModel.statusFilter == status
+                            ? AppColors.primary400
+                            : AppColors.textTertiary
+                    )
+                
+                Rectangle()
+                    .fill(viewModel.statusFilter == status ? AppColors.primary400 : Color.clear)
+                    .frame(height: 2)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, AppSpacing.spacing2)
     }
     
     /// Single profile — show name only (no keyword count to avoid stale data)
@@ -169,6 +270,12 @@ struct LeadFeedScreen: View {
             Text(profile.name)
                 .font(AppTypography.bodySmall)
                 .foregroundColor(AppColors.textSecondary)
+            
+            if let count = viewModel.leadCountByProfile[profile.id], count > 0 {
+                Text("\(count) lead\(count == 1 ? "" : "s")")
+                    .font(AppTypography.caption)
+                    .foregroundColor(AppColors.textTertiary)
+            }
             
             Spacer()
         }
@@ -208,20 +315,14 @@ struct LeadFeedScreen: View {
         VStack(spacing: AppSpacing.spacing6) {
             Spacer()
             
-            Image(systemName: "target")
+            Image(systemName: statusEmptyIcon)
                 .font(.system(size: 56))
                 .foregroundStyle(AppColors.primaryGradient)
             
             VStack(spacing: AppSpacing.spacing2) {
-                if let profile = viewModel.selectedProfile {
-                    Text("No leads for \"\(profile.name)\"")
-                        .font(AppTypography.heading2)
-                        .foregroundColor(AppColors.textPrimary)
-                } else {
-                    Text("No Leads Yet")
-                        .font(AppTypography.heading2)
-                        .foregroundColor(AppColors.textPrimary)
-                }
+                Text(statusEmptyTitle)
+                    .font(AppTypography.heading2)
+                    .foregroundColor(AppColors.textPrimary)
                 
                 if let msg = viewModel.scanSummary {
                     Text(msg)
@@ -229,29 +330,77 @@ struct LeadFeedScreen: View {
                         .foregroundColor(AppColors.textSecondary)
                         .multilineTextAlignment(.center)
                 } else {
-                    Text("We're monitoring Reddit automatically.\nTap below for an instant scan.")
+                    Text(statusEmptyMessage)
                         .font(AppTypography.bodyMedium)
                         .foregroundColor(AppColors.textSecondary)
                         .multilineTextAlignment(.center)
                 }
             }
             
-            PrimaryButton(
-                viewModel.isScanning ? "Scanning Reddit..." : "🔍 Scan Reddit Now",
-                isLoading: viewModel.isScanning
-            ) {
-                triggerScan()
-            }
-            .frame(maxWidth: 280)
-            .disabled(viewModel.isScanning || viewModel.selectedProfile == nil)
-            
-            if viewModel.isScanning {
-                ScanTimerView()
+            // Only show scan button for "New" status
+            if viewModel.statusFilter == .new {
+                if viewModel.showAllProfiles {
+                    PrimaryButton(
+                        viewModel.isScanning ? "Scanning..." : "🔍 Scan All Profiles",
+                        isLoading: viewModel.isScanning
+                    ) {
+                        viewModel.scanAllProfiles()
+                    }
+                    .frame(maxWidth: 280)
+                    .disabled(viewModel.isScanning)
+                } else {
+                    PrimaryButton(
+                        viewModel.isScanning ? "Scanning Reddit..." : "🔍 Scan Reddit Now",
+                        isLoading: viewModel.isScanning
+                    ) {
+                        triggerScan()
+                    }
+                    .frame(maxWidth: 280)
+                    .disabled(viewModel.isScanning || viewModel.selectedProfile == nil)
+                }
+                
+                if viewModel.isScanning {
+                    ScanTimerView()
+                }
             }
             
             Spacer()
         }
         .padding(AppSpacing.spacing8)
+    }
+    
+    private var statusEmptyIcon: String {
+        switch viewModel.statusFilter {
+        case .saved: "bookmark"
+        case .contacted: "envelope.open"
+        case .dismissed: "xmark.circle"
+        default: "target"
+        }
+    }
+    
+    private var statusEmptyTitle: String {
+        let profileName = viewModel.showAllProfiles ? nil : viewModel.selectedProfile?.name
+        let suffix = profileName.map { " for \"\($0)\"" } ?? ""
+        
+        switch viewModel.statusFilter {
+        case .saved: return "No saved leads\(suffix)"
+        case .contacted: return "No contacted leads\(suffix)"
+        case .dismissed: return "No dismissed leads\(suffix)"
+        default:
+            if let name = profileName {
+                return "No leads for \"\(name)\""
+            }
+            return "No Leads Yet"
+        }
+    }
+    
+    private var statusEmptyMessage: String {
+        switch viewModel.statusFilter {
+        case .saved: "Bookmark leads you're interested in.\nThey'll appear here."
+        case .contacted: "Leads you've reached out to\nwill appear here."
+        case .dismissed: "Dismissed leads will appear here."
+        default: "We're monitoring Reddit automatically.\nTap below for an instant scan."
+        }
     }
     
     // MARK: - Feed Content
@@ -279,53 +428,58 @@ struct LeadFeedScreen: View {
                     .cornerRadius(AppRadius.sm)
                 }
                 
-                // Lead count + clear
-                HStack {
-                    Text("\(viewModel.leads.count) lead\(viewModel.leads.count == 1 ? "" : "s")")
-                        .font(AppTypography.caption)
-                        .foregroundColor(AppColors.textTertiary)
-                    Spacer()
-                    
-                    Button(action: { showClearConfirm = true }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "trash")
-                                .font(.system(size: 11))
-                            Text("Clear all")
-                                .font(AppTypography.caption)
-                        }
-                        .foregroundColor(AppColors.textTertiary)
+                // Scanning progress
+                if viewModel.isScanning, let progress = viewModel.scanProgress {
+                    HStack {
+                        ProgressView()
+                            .tint(AppColors.primary400)
+                        Text(progress)
+                            .font(AppTypography.bodySmall)
+                            .foregroundColor(AppColors.textSecondary)
+                        Spacer()
                     }
+                    .padding(AppSpacing.spacing3)
+                    .background(AppColors.primary500.opacity(0.1))
+                    .cornerRadius(AppRadius.sm)
                 }
+                
+                // Lead count
+                Text("\(viewModel.leads.count) lead\(viewModel.leads.count == 1 ? "" : "s")")
+                    .font(AppTypography.caption)
+                    .foregroundColor(AppColors.textTertiary)
                 
                 ForEach(viewModel.visibleLeads) { lead in
                     NavigationLink(destination: LeadDetailScreen(
                         lead: lead,
-                        onStatusChange: { newStatus in
+                        onAction: { action in
                             Task {
-                                switch newStatus {
-                                case .saved:
-                                    await viewModel.saveLead(lead)
-                                case .dismissed:
-                                    await viewModel.dismissLead(lead)
-                                case .contacted:
-                                    await viewModel.markContacted(lead)
-                                default:
-                                    break
+                                switch action {
+                                case .save: await viewModel.saveLead(lead)
+                                case .unsave: await viewModel.unsaveLead(lead)
+                                case .dismiss: await viewModel.dismissLead(lead)
+                                case .delete: await viewModel.deleteLead(lead)
+                                case .contacted: await viewModel.markContacted(lead)
+                                case .reply: break // handled by sheet in detail
                                 }
                             }
                         }
                     )) {
                         LeadCardView(
                             lead: lead,
-                            onSave: {
-                                Task { await viewModel.saveLead(lead) }
-                            },
-                            onDismiss: {
-                                Task { await viewModel.dismissLead(lead) }
-                            },
-                            onReply: {
-                                replyLead = lead
-                                showReplySheet = true
+                            profileName: viewModel.profiles.count > 1 ? viewModel.profileName(for: lead.profileId) : nil,
+                            actions: { action in
+                                Task {
+                                    switch action {
+                                    case .save: await viewModel.saveLead(lead)
+                                    case .unsave: await viewModel.unsaveLead(lead)
+                                    case .dismiss: await viewModel.dismissLead(lead)
+                                    case .delete: await viewModel.deleteLead(lead)
+                                    case .contacted: await viewModel.markContacted(lead)
+                                    case .reply:
+                                        replyLead = lead
+                                        showReplySheet = true
+                                    }
+                                }
                             },
                             onTap: {}
                         )

@@ -8,7 +8,7 @@ final class AIReplyRepository: AIReplyRepositoryProtocol {
     
     func generateReply(leadId: UUID, tone: ReplyTone, context: String) async throws -> AIReply {
         guard let session = try? await client.auth.session else {
-            throw ServiceError.unauthorized
+            throw AppError.authFailed("Please sign in again")
         }
         
         guard let url = URL(string: "\(supabaseURL)/functions/v1/generate-reply") else {
@@ -34,7 +34,7 @@ final class AIReplyRepository: AIReplyRepositoryProtocol {
         
         guard let httpResponse = response as? HTTPURLResponse,
               httpResponse.statusCode == 200 else {
-            throw ServiceError.serverError((response as? HTTPURLResponse)?.statusCode ?? 500)
+            throw AppError.networkError("Server error (\((response as? HTTPURLResponse)?.statusCode ?? 500))")
         }
         
         struct ReplyResponse: Codable {

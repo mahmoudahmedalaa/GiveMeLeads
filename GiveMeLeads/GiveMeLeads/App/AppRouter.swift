@@ -4,8 +4,9 @@ import Observation
 enum AuthState: Equatable {
     case loading
     case unauthenticated
-    case needsSetup    // Authenticated but no tracking profiles yet
-    case authenticated // Authenticated and has profiles → show main tabs
+    case needsOnboarding // First-time user → show onboarding slides
+    case needsSetup      // Authenticated but no tracking profiles yet
+    case authenticated   // Authenticated and has profiles → show main tabs
 }
 
 @Observable
@@ -15,16 +16,37 @@ final class AppRouter {
     var showPaywall: Bool = false
     var showProductSetup: Bool = false  // For creating new profile from Profiles tab
     
+    private static let hasSeenOnboardingKey = "hasSeenOnboarding"
+    
+    var hasSeenOnboarding: Bool {
+        get { UserDefaults.standard.bool(forKey: Self.hasSeenOnboardingKey) }
+        set { UserDefaults.standard.set(newValue, forKey: Self.hasSeenOnboardingKey) }
+    }
+    
     func handleAuthStateChange(isAuthenticated: Bool) {
-        // Don't go straight to .authenticated — check for profiles first
         if isAuthenticated {
-            Task { @MainActor in
-                await checkNeedsSetup()
+            // First-time user → show onboarding first
+            if !hasSeenOnboarding {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    authState = .needsOnboarding
+                }
+            } else {
+                Task { @MainActor in
+                    await checkNeedsSetup()
+                }
             }
         } else {
             withAnimation(.easeInOut(duration: 0.3)) {
                 authState = .unauthenticated
             }
+        }
+    }
+    
+    /// Called when onboarding finishes (after paywall shown/dismissed)
+    func onboardingComplete() {
+        hasSeenOnboarding = true
+        Task { @MainActor in
+            await checkNeedsSetup()
         }
     }
     
@@ -54,6 +76,14 @@ final class AppRouter {
             authState = .authenticated
             selectedTab = .leads
             showProductSetup = false
+        }
+    }
+    
+    /// Skip setup — go directly to main tabs (for returning users who don't want to create a profile right now)
+    func skipSetup() {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            authState = .authenticated
+            selectedTab = .leads
         }
     }
     

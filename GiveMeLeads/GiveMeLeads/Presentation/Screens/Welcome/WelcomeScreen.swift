@@ -1,184 +1,203 @@
 import SwiftUI
 import AuthenticationServices
+import UIKit
 
+/// Welcome & sign-in screen — first thing new users see
 struct WelcomeScreen: View {
     @Environment(AppRouter.self) private var router
     @State private var viewModel: AuthViewModel?
-    @State private var animateContent = false
     
     var body: some View {
         ZStack {
-            // Background gradient
-            LinearGradient(
-                colors: [AppColors.background, AppColors.bg700],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
+            AppColors.background.ignoresSafeArea()
             
-            VStack(spacing: AppSpacing.spacing6) {
-                Spacer()
-                
-                // Logo & branding
-                VStack(spacing: AppSpacing.spacing4) {
-                    Image(systemName: "target")
-                        .font(.system(size: 72))
-                        .foregroundStyle(AppColors.primaryGradient)
-                        .scaleEffect(animateContent ? 1 : 0.8)
-                    
-                    Text("GiveMeLeads")
-                        .font(AppTypography.heading1)
-                        .foregroundColor(AppColors.textPrimary)
-                    
-                    Text("Find leads that want\nwhat you offer")
-                        .font(AppTypography.bodyLarge)
-                        .foregroundColor(AppColors.textSecondary)
-                        .multilineTextAlignment(.center)
+            if let vm = viewModel {
+                if vm.otpSent {
+                    OTPVerificationScreen(viewModel: vm)
+                } else {
+                    mainContent(vm)
                 }
-                .opacity(animateContent ? 1 : 0)
-                .offset(y: animateContent ? 0 : 20)
-                
-                Spacer()
-                
-                // Features list
-                VStack(alignment: .leading, spacing: AppSpacing.spacing3) {
-                    FeatureRow(icon: "magnifyingglass", text: "Track keywords across subreddits")
-                    FeatureRow(icon: "chart.bar.fill", text: "AI-powered lead scoring")
-                    FeatureRow(icon: "text.bubble.fill", text: "Smart reply suggestions")
-                }
-                .padding(.horizontal, AppSpacing.spacing4)
-                .opacity(animateContent ? 1 : 0)
-                .offset(y: animateContent ? 0 : 15)
-                
-                Spacer()
-                
-                // Auth Section
-                VStack(spacing: AppSpacing.spacing4) {
-                    // Sign in with Apple
-                    SignInWithAppleButton(.signIn) { request in
-                        request.requestedScopes = [.email, .fullName]
-                    } onCompletion: { result in
-                        Task {
-                            await viewModel?.handleAppleSignIn(result: result)
-                        }
-                    }
-                    .signInWithAppleButtonStyle(.white)
-                    .frame(height: 52)
-                    .cornerRadius(AppSpacing.spacing3)
-                    
-                    // Divider
-                    HStack {
-                        Rectangle()
-                            .fill(AppColors.textTertiary.opacity(0.3))
-                            .frame(height: 1)
-                        Text("or")
-                            .font(AppTypography.bodySmall)
-                            .foregroundColor(AppColors.textTertiary)
-                        Rectangle()
-                            .fill(AppColors.textTertiary.opacity(0.3))
-                            .frame(height: 1)
-                    }
-                    
-                    // Email magic link
-                    if let vm = viewModel {
-                        if vm.magicLinkSent {
-                            // Success state
-                            HStack(spacing: AppSpacing.spacing2) {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(AppColors.success)
-                                Text("Check your email for the sign-in link!")
-                                    .font(AppTypography.bodyMedium)
-                                    .foregroundColor(AppColors.success)
-                            }
-                            .padding(.vertical, AppSpacing.spacing3)
-                            
-                            Button("Use a different email") {
-                                vm.magicLinkSent = false
-                                vm.emailText = ""
-                            }
-                            .font(AppTypography.bodySmall)
-                            .foregroundColor(AppColors.primary400)
-                        } else {
-                            // Email input
-                            HStack(spacing: AppSpacing.spacing2) {
-                                TextField("Enter your email", text: Binding(
-                                    get: { vm.emailText },
-                                    set: { vm.emailText = $0 }
-                                ))
-                                .textContentType(.emailAddress)
-                                .keyboardType(.emailAddress)
-                                .autocapitalization(.none)
-                                .disableAutocorrection(true)
-                                .font(AppTypography.bodyMedium)
-                                .foregroundColor(AppColors.textPrimary)
-                                .padding(.horizontal, AppSpacing.spacing4)
-                                .padding(.vertical, AppSpacing.spacing3)
-                                .background(AppColors.bg700)
-                                .cornerRadius(AppSpacing.spacing3)
-                                
-                                Button(action: {
-                                    Task { await vm.sendMagicLink() }
-                                }) {
-                                    if vm.isLoading {
-                                        ProgressView()
-                                            .tint(.white)
-                                            .frame(width: 52, height: 48)
-                                    } else {
-                                        Image(systemName: "arrow.right.circle.fill")
-                                            .font(.system(size: 32))
-                                            .foregroundStyle(AppColors.primaryGradient)
-                                            .frame(width: 52, height: 48)
-                                    }
-                                }
-                                .disabled(vm.isLoading)
-                            }
-                        }
-                    }
-                    
-                    if let error = viewModel?.error {
-                        Text(error)
-                            .font(AppTypography.caption)
-                            .foregroundColor(AppColors.error)
-                    }
-                    
-                    Text("By continuing, you agree to our Terms and Privacy Policy")
-                        .font(AppTypography.caption)
-                        .foregroundColor(AppColors.textTertiary)
-                        .multilineTextAlignment(.center)
-                }
-                .opacity(animateContent ? 1 : 0)
-                .offset(y: animateContent ? 0 : 30)
-                .padding(.bottom, AppSpacing.spacing6)
             }
-            .padding(.horizontal, AppSpacing.spacing6)
         }
         .onAppear {
-            viewModel = AuthViewModel(router: router)
-            
-            withAnimation(.spring(response: 0.8, dampingFraction: 0.7).delay(0.2)) {
-                animateContent = true
+            if viewModel == nil {
+                viewModel = AuthViewModel(router: router)
             }
         }
     }
-}
-
-// MARK: - Feature Row
-private struct FeatureRow: View {
-    let icon: String
-    let text: String
     
-    var body: some View {
+    // MARK: - Main Welcome Content
+    
+    @ViewBuilder
+    private func mainContent(_ vm: AuthViewModel) -> some View {
+        VStack(spacing: 0) {
+            Spacer()
+            
+            // Logo & Branding
+            VStack(spacing: AppSpacing.spacing3) {
+                ZStack {
+                    Circle()
+                        .fill(AppColors.primary500.opacity(0.15))
+                        .frame(width: 100, height: 100)
+                    
+                    Image(systemName: "target")
+                        .font(.system(size: 44, weight: .medium))
+                        .foregroundStyle(AppColors.primaryGradient)
+                }
+                
+                Text("GiveMeLeads")
+                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .foregroundColor(AppColors.textPrimary)
+                
+                Text("Find your ideal customers\non Reddit, automatically")
+                    .font(AppTypography.bodyMedium)
+                    .foregroundColor(AppColors.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(4)
+            }
+            
+            Spacer()
+                .frame(height: 40)
+            
+            // Feature Highlights
+            VStack(spacing: AppSpacing.spacing4) {
+                featureRow(icon: "sparkles", text: "AI-powered lead discovery")
+                featureRow(icon: "bolt.fill", text: "Smart relevance scoring")
+                featureRow(icon: "text.bubble.fill", text: "AI reply suggestions")
+            }
+            .padding(.horizontal, AppSpacing.spacing6)
+            
+            Spacer()
+            
+            // Auth Section
+            VStack(spacing: AppSpacing.spacing4) {
+                // Sign in with Apple (primary)
+                SignInWithAppleButton(.signIn) { request in
+                    request.requestedScopes = [.email, .fullName]
+                } onCompletion: { result in
+                    Task {
+                        await vm.handleAppleSignIn(result: result)
+                    }
+                }
+                .signInWithAppleButtonStyle(.white)
+                .frame(height: 50)
+                .clipShape(RoundedRectangle(cornerRadius: AppRadius.md))
+                
+                // Divider
+                HStack(spacing: AppSpacing.spacing3) {
+                    Rectangle()
+                        .fill(Color.white.opacity(0.12))
+                        .frame(height: 1)
+                    Text("or")
+                        .font(AppTypography.bodySmall)
+                        .foregroundColor(AppColors.textTertiary)
+                    Rectangle()
+                        .fill(Color.white.opacity(0.12))
+                        .frame(height: 1)
+                }
+                
+                // Email OTP
+                VStack(spacing: AppSpacing.spacing3) {
+                    HStack(spacing: AppSpacing.spacing2) {
+                        Image(systemName: "envelope.fill")
+                            .foregroundColor(AppColors.textTertiary)
+                            .font(.system(size: 16))
+                        
+                        TextField("Your email address", text: Bindable(vm).emailText)
+                            .font(AppTypography.bodyMedium)
+                            .foregroundColor(AppColors.textPrimary)
+                            .textContentType(.emailAddress)
+                            .keyboardType(.emailAddress)
+                            .autocapitalization(.none)
+                            .disableAutocorrection(true)
+                    }
+                    .padding(AppSpacing.spacing3)
+                    .background(AppColors.bg700)
+                    .clipShape(RoundedRectangle(cornerRadius: AppRadius.md))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AppRadius.md)
+                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                    )
+                    
+                    Button(action: {
+                        Task { await vm.sendOTP() }
+                    }) {
+                        HStack(spacing: 6) {
+                            if vm.isLoading {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                    .tint(.white)
+                            }
+                            Text(vm.isLoading ? "Sending..." : "Send Login Code")
+                                .font(AppTypography.bodyMedium)
+                                .fontWeight(.semibold)
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(
+                            RoundedRectangle(cornerRadius: AppRadius.md)
+                                .fill(AppColors.primaryGradient)
+                        )
+                    }
+                    .disabled(vm.emailText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || vm.isLoading)
+                    .opacity(vm.emailText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.5 : 1)
+                }
+                
+                if let error = vm.error {
+                    Text(error)
+                        .font(AppTypography.bodySmall)
+                        .foregroundColor(AppColors.error)
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .padding(.horizontal, AppSpacing.spacing4)
+            
+            // Footer
+            HStack(spacing: 4) {
+                Text("By continuing, you agree to our")
+                    .font(AppTypography.caption)
+                    .foregroundColor(AppColors.textTertiary)
+                Button("Terms") {
+                    if let url = URL(string: AppConfig.termsOfServiceURL) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+                .font(AppTypography.caption)
+                .foregroundColor(AppColors.primary400)
+                Text("&")
+                    .font(AppTypography.caption)
+                    .foregroundColor(AppColors.textTertiary)
+                Button("Privacy") {
+                    if let url = URL(string: AppConfig.privacyPolicyURL) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+                .font(AppTypography.caption)
+                .foregroundColor(AppColors.primary400)
+            }
+            .padding(.top, AppSpacing.spacing4)
+            .padding(.bottom, AppSpacing.spacing6)
+        }
+        .padding(.horizontal, AppSpacing.spacing4)
+    }
+    
+    // MARK: - Feature Row
+    
+    private func featureRow(icon: String, text: String) -> some View {
         HStack(spacing: AppSpacing.spacing3) {
             Image(systemName: icon)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(AppColors.primary500)
-                .frame(width: 28, height: 28)
+                .font(.system(size: 18))
+                .foregroundStyle(AppColors.primaryGradient)
+                .frame(width: 32, height: 32)
                 .background(AppColors.primary500.opacity(0.12))
-                .cornerRadius(8)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
             
             Text(text)
                 .font(AppTypography.bodyMedium)
-                .foregroundColor(AppColors.textPrimary)
+                .foregroundColor(AppColors.textSecondary)
+            
+            Spacer()
         }
     }
 }
@@ -186,4 +205,5 @@ private struct FeatureRow: View {
 #Preview {
     WelcomeScreen()
         .environment(AppRouter())
+        .preferredColorScheme(.dark)
 }

@@ -418,7 +418,12 @@ final class RedditSearchService: RedditSearchServiceProtocol {
         // Quality gate at 3/10 (equivalent to previous 30/100)
         guard scoreOutOf10 >= 3 else { return nil }
         
-        let breakdown = ScoreBreakdown(intent: intentScore, urgency: urgencyScore, fit: fitScore)
+        // Normalize breakdown to 1–10 scale (matching overall score)
+        let breakdown = ScoreBreakdown(
+            intent: max(1, min(10, (intentScore + 5) / 10)),
+            urgency: max(1, min(10, (urgencyScore + 5) / 10)),
+            fit: max(1, min(10, (fitScore + 5) / 10))
+        )
         
         // ── Extract Matching Snippet ──────────────────────────
         let allPatterns = productIntentPatterns.map(\.pattern) + genericIntentPatterns.map(\.pattern)
@@ -587,6 +592,67 @@ final class RedditSearchService: RedditSearchServiceProtocol {
         }
         
         return "📝 Relevant discussion. Engage authentically — share your expertise on the topic and mention your product only if it directly addresses their situation."
+    }
+    
+    // MARK: - Fetch Top Comments for a Post
+    
+    /// A single comment on a Reddit post
+    struct PostComment: Codable, Identifiable {
+        let id: String
+        let author: String
+        let body: String
+        let ups: Int
+        let createdUtc: Double
+        
+        enum CodingKeys: String, CodingKey {
+            case id, author, body, ups
+            case createdUtc = "created_utc"
+        }
+    }
+    
+    /// Fetch the top comments from a specific Reddit post
+    func fetchTopComments(postId: String, subreddit: String, limit: Int = 5) async throws -> [PostComment] {
+        // postId might be "t3_abc123" — strip the prefix
+        let cleanId = postId.hasPrefix("t3_") ? String(postId.dropFirst(3)) : postId
+        let urlString = "https://www.reddit.com/r/\(subreddit)/comments/\(cleanId).json?sort=top&limit=\(limit)"
+        
+        guard let url = URL(string: urlString) else { return [] }
+        var request = URLRequest(url: url)
+        request.setValue("ios:com.givemeleads:v1.0 (by /u/givemeleads)", forHTTPHeaderField: "User-Agent")
+        request.timeoutInterval = 10
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else { return [] }
+        
+        // Reddit returns an array of 2 listings: [0] = post, [1] = comments
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]],
+              json.count >= 2,
+              let commentListing = json[1]["data"] as? [String: Any],
+              let children = commentListing["children"] as? [[String: Any]] else { return [] }
+        
+        var comments: [PostComment] = []
+        for child in children {
+            guard let kind = child["kind"] as? String, kind == "t1",
+                  let commentData = child["data"] as? [String: Any],
+                  let id = commentData["id"] as? String,
+                  let author = commentData["author"] as? String,
+                  let body = commentData["body"] as? String,
+                  author != "[deleted]", author != "AutoModerator",
+                  !body.isEmpty, body != "[deleted]", body != "[removed]" else { continue }
+            
+            let ups = commentData["ups"] as? Int ?? 0
+            let createdUtc = commentData["created_utc"] as? Double ?? 0
+            
+            comments.append(PostComment(
+                id: id,
+                author: author,
+                body: body,
+                ups: ups,
+                createdUtc: createdUtc
+            ))
+        }
+        
+        return comments.sorted { $0.ups > $1.ups }.prefix(limit).map { $0 }
     }
 }
 

@@ -46,6 +46,16 @@ struct ScoreBreakdown: Codable, Equatable {
     let intent: Int
     let urgency: Int
     let fit: Int
+    
+    /// Normalize to 1–10 for display (handles legacy 0–100 data from DB)
+    func displayValue(_ raw: Int) -> Int {
+        if raw > 10 { return max(1, min(10, (raw + 5) / 10)) }
+        return max(1, min(10, raw))
+    }
+    
+    var intentDisplay: Int { displayValue(intent) }
+    var urgencyDisplay: Int { displayValue(urgency) }
+    var fitDisplay: Int { displayValue(fit) }
 }
 
 enum LeadStatus: String, Codable, CaseIterable {
@@ -81,7 +91,7 @@ extension Lead {
         body: "Currently using Asana but it's too expensive for our small team. We need something that handles task dependencies well and has a decent mobile experience. Budget is under $50/user/month. Any recommendations?",
         url: "https://reddit.com/r/SaaS/comments/abc123",
         score: 9,
-        scoreBreakdown: ScoreBreakdown(intent: 95, urgency: 88, fit: 94),
+        scoreBreakdown: ScoreBreakdown(intent: 9, urgency: 8, fit: 9),
         upvotes: 47,
         commentCount: 12,
         status: .new,
@@ -100,7 +110,7 @@ extension Lead {
             title: "Can anyone recommend a CRM for small teams?",
             body: "We're a 5-person startup and need a CRM that doesn't cost a fortune.",
             url: "https://reddit.com/r/startup/comments/def456",
-            score: 7, scoreBreakdown: ScoreBreakdown(intent: 70, urgency: 55, fit: 75),
+            score: 7, scoreBreakdown: ScoreBreakdown(intent: 7, urgency: 6, fit: 8),
             upvotes: 23, commentCount: 8, status: .new,
             postedAt: Date().addingTimeInterval(-18000), discoveredAt: Date()
         ),
@@ -110,7 +120,7 @@ extension Lead {
             title: "How do you validate your B2B product idea with potential leads?",
             body: nil,
             url: "https://reddit.com/r/Entrepreneur/comments/ghi789",
-            score: 3, scoreBreakdown: ScoreBreakdown(intent: 30, urgency: 25, fit: 45),
+            score: 3, scoreBreakdown: ScoreBreakdown(intent: 3, urgency: 3, fit: 5),
             upvotes: 45, commentCount: 11, status: .new,
             postedAt: Date().addingTimeInterval(-28800), discoveredAt: Date()
         ),

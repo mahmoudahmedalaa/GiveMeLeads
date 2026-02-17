@@ -7,8 +7,9 @@ import Observation
 final class AuthViewModel {
     var isLoading = false
     var error: String?
-    var magicLinkSent = false
+    var otpSent = false
     var emailText = ""
+    var otpCode = ""
     
     private let authRepo: AuthRepositoryProtocol
     private let router: AppRouter
@@ -31,8 +32,8 @@ final class AuthViewModel {
         }
     }
     
-    /// Send magic link email
-    func sendMagicLink() async {
+    /// Send OTP code to email
+    func sendOTP() async {
         let email = emailText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !email.isEmpty else {
             error = "Please enter your email"
@@ -44,14 +45,38 @@ final class AuthViewModel {
         defer { isLoading = false }
         
         do {
-            try await authRepo.sendMagicLink(email: email)
-            magicLinkSent = true
+            try await authRepo.sendOTP(email: email)
+            otpSent = true
         } catch {
-            self.error = error.localizedDescription
+            self.error = "Failed to send code. Please try again."
         }
     }
     
-    /// Handle deep link callback from magic link
+    /// Verify the OTP code entered by the user
+    func verifyOTP() async {
+        // Guard against double-submit
+        guard !isLoading else { return }
+        
+        let code = otpCode.filter { $0.isNumber }
+        guard code.count == 6 else {
+            error = "Please enter the 6-digit code"
+            return
+        }
+        
+        isLoading = true
+        error = nil
+        defer { isLoading = false }
+        
+        do {
+            let email = emailText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let _ = try await authRepo.verifyOTP(email: email, code: code)
+            router.handleAuthStateChange(isAuthenticated: true)
+        } catch {
+            self.error = "Invalid code. Please check and try again."
+        }
+    }
+    
+    /// Handle deep link callback (kept for backward compat)
     func handleDeepLink(url: URL) async {
         isLoading = true
         defer { isLoading = false }
@@ -117,5 +142,12 @@ final class AuthViewModel {
         } catch {
             self.error = error.localizedDescription
         }
+    }
+    
+    /// Reset OTP state to go back to email entry
+    func resetOTP() {
+        otpSent = false
+        otpCode = ""
+        error = nil
     }
 }

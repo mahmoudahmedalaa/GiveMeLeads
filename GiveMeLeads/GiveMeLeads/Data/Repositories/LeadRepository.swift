@@ -73,12 +73,34 @@ final class LeadRepository: LeadRepositoryProtocol {
         return response
     }
     
+    func getLeadCount(profileId: UUID, status: LeadStatus?) async throws -> Int {
+        var query = client
+            .from("leads")
+            .select("id", head: true, count: .exact)
+            .eq("profile_id", value: profileId.uuidString)
+        
+        if let status {
+            query = query.eq("status", value: status.rawValue)
+        }
+        
+        let response = try await query.execute()
+        return response.count ?? 0
+    }
+    
     func clearLeadsForProfile(profileId: UUID) async throws {
         try await client
             .from("leads")
             .delete()
             .eq("profile_id", value: profileId.uuidString)
             .eq("status", value: LeadStatus.new.rawValue)
+            .execute()
+    }
+    
+    func deleteLead(leadId: UUID) async throws {
+        try await client
+            .from("leads")
+            .delete()
+            .eq("id", value: leadId.uuidString)
             .execute()
     }
 }

@@ -31,7 +31,15 @@ final class KeywordViewModel {
     }
     
     var canAddProfile: Bool {
-        profiles.count < AppConfig.maxProfiles
+        GatingService.shared.canCreateProfile(existingCount: profiles.count).isAllowed
+    }
+    
+    var profileGatingMessage: String? {
+        let result = GatingService.shared.canCreateProfile(existingCount: profiles.count)
+        if case .blocked(let reason) = result {
+            return reason
+        }
+        return nil
     }
     
     /// Fetch all profiles with keywords
@@ -74,23 +82,35 @@ final class KeywordViewModel {
             
             let subreddits = profile.subreddits.isEmpty ? ["all"] : profile.subreddits
             
-            // Search Reddit
+            // Get user's product description for AI context
+            let productDesc = await fetchProductDescription() ?? keywords.joined(separator: " ")
+            
+            // Phase 1: Search Reddit
+            scanMessage = "🔍 Searching r/\(subreddits.first ?? "all")..."
             let posts = try await redditSearch.search(
                 keywords: keywords,
                 subreddits: subreddits,
                 limit: 25
             )
             
-            // Score and save
-            let productDesc = keywords.joined(separator: " ")
+            guard !posts.isEmpty else {
+                scanMessage = "No posts found. Try different keywords or subreddits."
+                isScanningProfile = nil
+                return
+            }
+            
+            // Phase 2: Score and save leads
             var totalFound = 0
             
-            for post in posts {
-                guard let intel = redditSearch.analyzePost(
-                    post,
+            for (index, post) in posts.enumerated() {
+                scanMessage = "🤖 Analyzing \(index + 1)/\(posts.count)..."
+                
+                // Try AI analysis first, fall back to local
+                let (score, breakdown, insight, snippet, approach) = await analyzePostWithAI(
+                    post: post,
                     keywords: keywords,
                     productDescription: productDesc
-                ) else { continue }
+                )
                 
                 let newLead = NewLead(
                     userId: userId,
@@ -102,16 +122,16 @@ final class KeywordViewModel {
                     title: post.title,
                     body: post.selftext,
                     url: "https://reddit.com\(post.permalink)",
-                    score: intel.score,
-                    scoreBreakdown: intel.breakdown,
+                    score: score,
+                    scoreBreakdown: breakdown,
                     upvotes: post.ups,
                     commentCount: post.numComments,
                     status: .new,
                     postedAt: Date(timeIntervalSince1970: post.createdUtc),
                     discoveredAt: Date(),
-                    relevanceInsight: intel.relevanceInsight,
-                    matchingSnippet: intel.matchingSnippet,
-                    suggestedApproach: intel.suggestedApproach
+                    relevanceInsight: insight,
+                    matchingSnippet: snippet,
+                    suggestedApproach: approach
                 )
                 
                 do {
@@ -134,6 +154,74 @@ final class KeywordViewModel {
         }
         
         isScanningProfile = nil
+    }
+    
+    /// Analyze a post using AI (Gemini) with local fallback
+    private func analyzePostWithAI(
+        post: RedditSearchService.RedditPost,
+        keywords: [String],
+        productDescription: String
+    ) async -> (score: Int, breakdown: ScoreBreakdown, insight: String?, snippet: String?, approach: String?) {
+        // Try AI analysis via Edge Function
+        do {
+            let analysis = try await AIAnalysisService.shared.analyzeLead(
+                title: post.title,
+                body: post.selftext ?? "",
+                subreddit: post.subreddit,
+                author: post.author,
+                productDescription: productDescription,
+                keywords: keywords
+            )
+            
+            // Map AI score to breakdown (divide evenly across intent/urgency/fit)
+            let third = max(1, analysis.score / 3)
+            let remainder = analysis.score - (third * 3)
+            let breakdown = ScoreBreakdown(
+                intent: min(10, third + (remainder > 0 ? 1 : 0)),
+                urgency: min(10, third + (remainder > 1 ? 1 : 0)),
+                fit: min(10, third)
+            )
+            
+            return (analysis.score, breakdown, analysis.relevanceInsight, analysis.matchingSnippet, analysis.suggestedApproach)
+        } catch {
+            // Fallback to local rule-based analysis
+            if let intel = redditSearch.analyzePost(
+                post,
+                keywords: keywords,
+                productDescription: productDescription
+            ) {
+                return (intel.score, intel.breakdown, intel.relevanceInsight, intel.matchingSnippet, intel.suggestedApproach)
+            }
+            
+            // Absolute fallback
+            return (3, ScoreBreakdown(intent: 3, urgency: 3, fit: 3), nil, nil, nil)
+        }
+    }
+    
+    /// Fetch the user's product description from their profile
+    private func fetchProductDescription() async -> String? {
+        do {
+            let userId = try await SupabaseManager.shared.client.auth.session.user.id
+            
+            struct UserProfile: Decodable {
+                let productDescription: String?
+                enum CodingKeys: String, CodingKey {
+                    case productDescription = "product_description"
+                }
+            }
+            
+            let response: UserProfile = try await SupabaseManager.shared.client
+                .from("users")
+                .select("product_description")
+                .eq("id", value: userId.uuidString)
+                .single()
+                .execute()
+                .value
+            
+            return response.productDescription
+        } catch {
+            return nil
+        }
     }
     
     /// Toggle profile active state
@@ -176,8 +264,11 @@ final class KeywordViewModel {
             return
         }
         
-        guard canAddProfile else {
-            error = "Maximum \(AppConfig.maxProfiles) profiles allowed"
+        let gateResult = GatingService.shared.canCreateProfile(existingCount: profiles.count)
+        guard gateResult.isAllowed else {
+            if case .blocked(let reason) = gateResult {
+                error = reason
+            }
             return
         }
         

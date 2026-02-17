@@ -5,6 +5,14 @@ enum Plan: String, Codable, CaseIterable {
     case free
     case starter
     case pro
+    
+    var displayName: String {
+        switch self {
+        case .free: "Free"
+        case .starter: "Starter"
+        case .pro: "Pro"
+        }
+    }
 }
 
 /// Entitlements describe the caps and features available to the current plan.
@@ -13,11 +21,13 @@ struct Entitlements: Codable, Equatable {
     let maxProfiles: Int
     let maxKeywordsTotal: Int
     let maxScansPerDay: Int
-    let maxVisibleLeads: Int
     let canExportCSV: Bool
     let hasSavedSearches: Bool
     let hasAlerts: Bool
     let hasWebhooks: Bool
+    
+    /// Convenience for unlimited values
+    static let unlimited = 999
 }
 
 extension Entitlements {
@@ -28,8 +38,7 @@ extension Entitlements {
                 plan: .free,
                 maxProfiles: 1,
                 maxKeywordsTotal: 5,
-                maxScansPerDay: 1,
-                maxVisibleLeads: 5,
+                maxScansPerDay: 3,
                 canExportCSV: false,
                 hasSavedSearches: false,
                 hasAlerts: false,
@@ -38,10 +47,9 @@ extension Entitlements {
         case .starter:
             return Entitlements(
                 plan: .starter,
-                maxProfiles: 5,
-                maxKeywordsTotal: 100,
-                maxScansPerDay: 10,
-                maxVisibleLeads: 500,
+                maxProfiles: 3,
+                maxKeywordsTotal: 30,
+                maxScansPerDay: 15,
                 canExportCSV: true,
                 hasSavedSearches: false,
                 hasAlerts: true,
@@ -50,10 +58,9 @@ extension Entitlements {
         case .pro:
             return Entitlements(
                 plan: .pro,
-                maxProfiles: 20,
-                maxKeywordsTotal: 1000,
-                maxScansPerDay: 100,
-                maxVisibleLeads: 5000,
+                maxProfiles: 10,
+                maxKeywordsTotal: Entitlements.unlimited,
+                maxScansPerDay: Entitlements.unlimited,
                 canExportCSV: true,
                 hasSavedSearches: true,
                 hasAlerts: true,

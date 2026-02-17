@@ -3,10 +3,14 @@ import SwiftUI
 /// Action-oriented lead detail — shows WHY this lead matters, the key snippet, and HOW to engage
 struct LeadDetailScreen: View {
     let lead: Lead
-    let onStatusChange: (LeadStatus) -> Void
+    let onAction: (LeadCardAction) -> Void
     
     @Environment(\.dismiss) private var dismiss
     @State private var showReplySheet = false
+    @State private var showDeleteConfirm = false
+    @State private var topComments: [RedditSearchService.PostComment] = []
+    @State private var isLoadingComments = false
+    private let redditSearch = RedditSearchService()
     
     var body: some View {
         ZStack {
@@ -27,7 +31,10 @@ struct LeadDetailScreen: View {
                     // 4. Original Post
                     contentSection
                     
-                    // 5. Actions
+                    // 5. Hot Comments
+                    hotCommentsSection
+                    
+                    // 6. Actions (context-aware)
                     actionSection
                 }
                 .padding(.horizontal, AppSpacing.spacing4)
@@ -49,8 +56,20 @@ struct LeadDetailScreen: View {
             }
         }
         .sheet(isPresented: $showReplySheet) {
-            ReplySheetView(lead: lead)
+            ReplySheetView(lead: lead, topComments: topComments)
                 .presentationDetents([.medium, .large])
+        }
+        .alert("Delete Lead?", isPresented: $showDeleteConfirm) {
+            Button("Delete", role: .destructive) {
+                onAction(.delete)
+                dismiss()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will permanently remove this lead. This cannot be undone.")
+        }
+        .task {
+            await loadTopComments()
         }
     }
     
@@ -86,9 +105,9 @@ struct LeadDetailScreen: View {
             // Score breakdown
             if let breakdown = lead.scoreBreakdown {
                 HStack(spacing: AppSpacing.spacing5) {
-                    ScoreBar(label: "Intent", value: breakdown.intent, color: AppColors.scoreHigh)
-                    ScoreBar(label: "Fit", value: breakdown.fit, color: AppColors.accentCyan)
-                    ScoreBar(label: "Urgency", value: breakdown.urgency, color: AppColors.warning)
+                    ScoreBar(label: "Intent", value: breakdown.intentDisplay, color: AppColors.scoreHigh)
+                    ScoreBar(label: "Fit", value: breakdown.fitDisplay, color: AppColors.accentCyan)
+                    ScoreBar(label: "Urgency", value: breakdown.urgencyDisplay, color: AppColors.warning)
                 }
                 .padding(.top, AppSpacing.spacing2)
             }
@@ -213,7 +232,105 @@ struct LeadDetailScreen: View {
         .clipShape(RoundedRectangle(cornerRadius: AppRadius.md))
     }
     
-    // MARK: - Actions
+    // MARK: - Hot Comments
+    
+    private var hotCommentsSection: some View {
+        Group {
+            if isLoadingComments {
+                VStack(spacing: AppSpacing.spacing3) {
+                    HStack {
+                        Image(systemName: "bubble.left.and.bubble.right.fill")
+                            .foregroundColor(AppColors.primary400)
+                        Text("Hot Comments")
+                            .font(AppTypography.heading3)
+                            .foregroundColor(AppColors.textPrimary)
+                        Spacer()
+                        ProgressView()
+                            .tint(AppColors.primary400)
+                    }
+                }
+                .padding(AppSpacing.spacing5)
+                .background(AppColors.bg700)
+                .clipShape(RoundedRectangle(cornerRadius: AppRadius.md))
+            } else if !topComments.isEmpty {
+                VStack(alignment: .leading, spacing: AppSpacing.spacing3) {
+                    HStack {
+                        Image(systemName: "bubble.left.and.bubble.right.fill")
+                            .foregroundColor(AppColors.primary400)
+                        Text("Hot Comments")
+                            .font(AppTypography.heading3)
+                            .foregroundColor(AppColors.textPrimary)
+                        Spacer()
+                        Text("\(topComments.count)")
+                            .font(AppTypography.caption)
+                            .foregroundColor(AppColors.textTertiary)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 2)
+                            .background(AppColors.bg600)
+                            .clipShape(Capsule())
+                    }
+                    
+                    Text("Top replies that may reveal buying signals")
+                        .font(AppTypography.caption)
+                        .foregroundColor(AppColors.textTertiary)
+                    
+                    ForEach(topComments) { comment in
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text("u/\(comment.author)")
+                                    .font(AppTypography.caption)
+                                    .foregroundColor(AppColors.primary400)
+                                Spacer()
+                                HStack(spacing: 3) {
+                                    Image(systemName: "arrow.up")
+                                        .font(.system(size: 10))
+                                    Text("\(comment.ups)")
+                                        .font(AppTypography.caption)
+                                }
+                                .foregroundColor(AppColors.textTertiary)
+                            }
+                            
+                            Text(String(comment.body.prefix(300)))
+                                .font(AppTypography.bodySmall)
+                                .foregroundColor(AppColors.textSecondary)
+                                .lineSpacing(3)
+                        }
+                        .padding(AppSpacing.spacing3)
+                        .background(AppColors.bg600.opacity(0.5))
+                        .clipShape(RoundedRectangle(cornerRadius: AppRadius.sm))
+                    }
+                }
+                .padding(AppSpacing.spacing5)
+                .background(AppColors.primary400.opacity(0.06))
+                .clipShape(RoundedRectangle(cornerRadius: AppRadius.md))
+                .overlay(
+                    RoundedRectangle(cornerRadius: AppRadius.md)
+                        .stroke(AppColors.primary400.opacity(0.2), lineWidth: 1)
+                )
+            }
+        }
+    }
+    
+    private func loadTopComments() async {
+        // Only fetch for posts (t3_) with score >= 5
+        guard lead.redditPostId.hasPrefix("t3_"),
+              (lead.score ?? 0) >= 5 else { return }
+        
+        isLoadingComments = true
+        defer { isLoadingComments = false }
+        
+        do {
+            topComments = try await redditSearch.fetchTopComments(
+                postId: lead.redditPostId,
+                subreddit: lead.subreddit,
+                limit: 5
+            )
+        } catch {
+            // Silently fail — comments are optional enrichment
+        }
+    }
+    
+    // MARK: - Context-Aware Actions
     
     private var actionSection: some View {
         VStack(spacing: AppSpacing.spacing3) {
@@ -226,22 +343,50 @@ struct LeadDetailScreen: View {
                 showReplySheet = true
             }
             
-            HStack(spacing: AppSpacing.spacing3) {
-                SecondaryButton("Save", icon: "bookmark.fill") {
-                    onStatusChange(.saved)
+            // Context-aware secondary actions
+            switch lead.status {
+            case .new:
+                HStack(spacing: AppSpacing.spacing3) {
+                    SecondaryButton("Save", icon: "bookmark.fill") {
+                        onAction(.save)
+                        dismiss()
+                    }
+                    
+                    SecondaryButton("Dismiss", icon: "xmark") {
+                        onAction(.dismiss)
+                        dismiss()
+                    }
+                }
+                
+                GhostButton("Mark as Contacted") {
+                    onAction(.contacted)
                     dismiss()
                 }
                 
-                SecondaryButton("Dismiss", icon: "xmark") {
-                    onStatusChange(.dismissed)
-                    dismiss()
+            case .saved:
+                HStack(spacing: AppSpacing.spacing3) {
+                    SecondaryButton("Contacted", icon: "envelope.fill") {
+                        onAction(.contacted)
+                        dismiss()
+                    }
+                    
+                    SecondaryButton("Unsave", icon: "bookmark.slash") {
+                        onAction(.unsave)
+                        dismiss()
+                    }
                 }
-            }
-            
-            if lead.status != .contacted {
-                GhostButton("Mark as Contacted") {
-                    onStatusChange(.contacted)
+                
+                GhostButton("Delete Permanently") {
+                    showDeleteConfirm = true
                 }
+                
+            case .contacted:
+                GhostButton("Delete Permanently") {
+                    showDeleteConfirm = true
+                }
+                
+            default:
+                EmptyView()
             }
         }
     }
@@ -272,7 +417,7 @@ struct ScoreBar: View {
                         .fill(color.opacity(0.15))
                     RoundedRectangle(cornerRadius: 3)
                         .fill(color)
-                        .frame(width: geo.size.width * CGFloat(value) / 100)
+                        .frame(width: geo.size.width * CGFloat(value) / 10)
                 }
             }
             .frame(height: 6)
@@ -287,13 +432,23 @@ struct ScoreBar: View {
 /// Sheet for AI reply suggestions
 struct ReplySheetView: View {
     let lead: Lead
+    var topComments: [RedditSearchService.PostComment] = []
+    
     @Environment(\.dismiss) private var dismiss
     @State private var selectedTone: ReplyTone = .professional
     @State private var generatedReply = ""
     @State private var isGenerating = false
     @State private var error: String?
+    @State private var productDescription: String?
+    @State private var replyTarget: ReplyTarget = .post
+    @State private var selectedComment: RedditSearchService.PostComment?
     
     private let replyRepo = AIReplyRepository()
+    
+    enum ReplyTarget: String, CaseIterable {
+        case post = "Reply to Post"
+        case comment = "Reply to Comment"
+    }
     
     var body: some View {
         NavigationStack {
@@ -301,37 +456,87 @@ struct ReplySheetView: View {
                 AppColors.background
                     .ignoresSafeArea()
                 
-                VStack(spacing: AppSpacing.spacing5) {
-                    // Tone selector
-                    HStack(spacing: AppSpacing.spacing3) {
-                        ForEach(ReplyTone.allCases, id: \.self) { tone in
-                            Button(action: { selectedTone = tone }) {
-                                Text(tone.displayName)
-                                    .font(AppTypography.buttonMedium)
-                                    .foregroundColor(selectedTone == tone ? .white : AppColors.textSecondary)
-                                    .padding(.horizontal, AppSpacing.spacing4)
-                                    .padding(.vertical, AppSpacing.spacing2)
-                                    .background(
-                                        selectedTone == tone
-                                        ? AnyShapeStyle(AppColors.primaryGradient)
-                                        : AnyShapeStyle(AppColors.bgGlass)
-                                    )
-                                    .clipShape(Capsule())
+                ScrollView {
+                    VStack(spacing: AppSpacing.spacing5) {
+                        // Reply target selector (post vs comment)
+                        if !topComments.isEmpty {
+                            Picker("Reply to", selection: $replyTarget) {
+                                ForEach(ReplyTarget.allCases, id: \.self) { target in
+                                    Text(target.rawValue).tag(target)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .onChange(of: replyTarget) { _, newValue in
+                                generatedReply = ""
+                                if newValue == .post { selectedComment = nil }
+                                else if selectedComment == nil { selectedComment = topComments.first }
                             }
                         }
-                    }
-                    
-                    if isGenerating {
-                        VStack(spacing: AppSpacing.spacing4) {
-                            ProgressView()
-                                .tint(AppColors.primary400)
-                            Text("Generating reply...")
-                                .font(AppTypography.bodySmall)
-                                .foregroundColor(AppColors.textTertiary)
+                        
+                        // Comment selector
+                        if replyTarget == .comment && !topComments.isEmpty {
+                            VStack(alignment: .leading, spacing: AppSpacing.spacing2) {
+                                Text("Select comment to reply to:")
+                                    .font(AppTypography.caption)
+                                    .foregroundColor(AppColors.textTertiary)
+                                
+                                ForEach(topComments, id: \.id) { comment in
+                                    Button {
+                                        selectedComment = comment
+                                        generatedReply = ""
+                                    } label: {
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text("u/\(comment.author)")
+                                                .font(AppTypography.caption)
+                                                .foregroundColor(AppColors.primary400)
+                                            Text(comment.body.prefix(120) + (comment.body.count > 120 ? "..." : ""))
+                                                .font(AppTypography.bodySmall)
+                                                .foregroundColor(AppColors.textSecondary)
+                                                .lineLimit(3)
+                                        }
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                        .padding(AppSpacing.spacing3)
+                                        .background(selectedComment?.id == comment.id ? AppColors.primary400.opacity(0.1) : AppColors.bg700)
+                                        .clipShape(RoundedRectangle(cornerRadius: AppRadius.sm))
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: AppRadius.sm)
+                                                .stroke(selectedComment?.id == comment.id ? AppColors.primary400.opacity(0.4) : Color.clear, lineWidth: 1)
+                                        )
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    } else if !generatedReply.isEmpty {
-                        ScrollView {
+                        
+                        // Tone selector
+                        HStack(spacing: AppSpacing.spacing3) {
+                            ForEach(ReplyTone.allCases, id: \.self) { tone in
+                                Button(action: { selectedTone = tone }) {
+                                    Text(tone.displayName)
+                                        .font(AppTypography.buttonMedium)
+                                        .foregroundColor(selectedTone == tone ? .white : AppColors.textSecondary)
+                                        .padding(.horizontal, AppSpacing.spacing4)
+                                        .padding(.vertical, AppSpacing.spacing2)
+                                        .background(
+                                            selectedTone == tone
+                                            ? AnyShapeStyle(AppColors.primaryGradient)
+                                            : AnyShapeStyle(AppColors.bgGlass)
+                                        )
+                                        .clipShape(Capsule())
+                                }
+                            }
+                        }
+                        
+                        if isGenerating {
+                            VStack(spacing: AppSpacing.spacing4) {
+                                ProgressView()
+                                    .tint(AppColors.primary400)
+                                Text(replyTarget == .comment ? "Crafting comment reply..." : "Generating reply...")
+                                    .font(AppTypography.bodySmall)
+                                    .foregroundColor(AppColors.textTertiary)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 120)
+                        } else if !generatedReply.isEmpty {
                             Text(generatedReply)
                                 .font(AppTypography.bodyMedium)
                                 .foregroundColor(AppColors.textPrimary)
@@ -339,44 +544,44 @@ struct ReplySheetView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .background(AppColors.bg700)
                                 .clipShape(RoundedRectangle(cornerRadius: AppRadius.md))
-                        }
-                        
-                        HStack(spacing: AppSpacing.spacing3) {
-                            PrimaryButton("Copy Reply", icon: "doc.on.doc") {
-                                UIPasteboard.general.string = generatedReply
-                            }
                             
-                            SecondaryButton("Regenerate", icon: "arrow.clockwise") {
+                            HStack(spacing: AppSpacing.spacing3) {
+                                PrimaryButton("Copy Reply", icon: "doc.on.doc") {
+                                    UIPasteboard.general.string = generatedReply
+                                }
+                                
+                                SecondaryButton("Regenerate", icon: "arrow.clockwise") {
+                                    Task { await generateReply() }
+                                }
+                            }
+                        } else {
+                            VStack(spacing: AppSpacing.spacing4) {
+                                Image(systemName: "sparkles")
+                                    .font(.system(size: 40))
+                                    .foregroundStyle(AppColors.primaryGradient)
+                                
+                                Text(replyTarget == .comment
+                                     ? "AI will generate a natural reply to the selected comment"
+                                     : "AI will generate a reply based on the post content and your product")
+                                    .font(AppTypography.bodyMedium)
+                                    .foregroundColor(AppColors.textSecondary)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 100)
+                            
+                            PrimaryButton("Generate Reply", icon: "sparkles") {
                                 Task { await generateReply() }
                             }
                         }
-                    } else {
-                        VStack(spacing: AppSpacing.spacing4) {
-                            Image(systemName: "sparkles")
-                                .font(.system(size: 40))
-                                .foregroundStyle(AppColors.primaryGradient)
-                            
-                            Text("AI will generate a reply based on the post content and your selected tone")
-                                .font(AppTypography.bodyMedium)
-                                .foregroundColor(AppColors.textSecondary)
-                                .multilineTextAlignment(.center)
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                         
-                        PrimaryButton("Generate Reply", icon: "sparkles") {
-                            Task { await generateReply() }
+                        if let error {
+                            Text(error)
+                                .font(AppTypography.caption)
+                                .foregroundColor(AppColors.error)
                         }
                     }
-                    
-                    if let error {
-                        Text(error)
-                            .font(AppTypography.caption)
-                            .foregroundColor(AppColors.error)
-                    }
-                    
-                    Spacer()
+                    .padding(AppSpacing.spacing5)
                 }
-                .padding(AppSpacing.spacing5)
             }
             .navigationTitle("AI Reply")
             .navigationBarTitleDisplayMode(.inline)
@@ -386,6 +591,10 @@ struct ReplySheetView: View {
                         .foregroundColor(AppColors.primary400)
                 }
             }
+            .task {
+                // Pre-fetch product description for context
+                productDescription = await fetchProductDescription()
+            }
         }
     }
     
@@ -393,11 +602,21 @@ struct ReplySheetView: View {
         isGenerating = true
         error = nil
         
+        // Build rich context string for the Edge Function
+        var contextParts: [String] = []
+        if let desc = productDescription, !desc.isEmpty {
+            contextParts.append(desc)
+        }
+        if replyTarget == .comment, let comment = selectedComment {
+            contextParts.append("[REPLY_TO_COMMENT] Author: u/\(comment.author) | Comment: \(comment.body)")
+        }
+        let context = contextParts.joined(separator: "\n\n")
+        
         do {
             let reply = try await replyRepo.generateReply(
                 leadId: lead.id,
                 tone: selectedTone,
-                context: ""
+                context: context
             )
             generatedReply = reply.suggestion
         } catch {
@@ -412,13 +631,38 @@ struct ReplySheetView: View {
         
         isGenerating = false
     }
+    
+    private func fetchProductDescription() async -> String? {
+        do {
+            let userId = try await SupabaseManager.shared.client.auth.session.user.id
+            
+            struct UserProfile: Decodable {
+                let productDescription: String?
+                enum CodingKeys: String, CodingKey {
+                    case productDescription = "product_description"
+                }
+            }
+            
+            let response: UserProfile = try await SupabaseManager.shared.client
+                .from("users")
+                .select("product_description")
+                .eq("id", value: userId.uuidString)
+                .single()
+                .execute()
+                .value
+            
+            return response.productDescription
+        } catch {
+            return nil
+        }
+    }
 }
 
 #Preview {
     NavigationStack {
         LeadDetailScreen(
             lead: Lead.samples[0],
-            onStatusChange: { _ in }
+            onAction: { _ in }
         )
     }
     .preferredColorScheme(.dark)

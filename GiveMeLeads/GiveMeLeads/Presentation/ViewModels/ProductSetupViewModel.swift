@@ -106,9 +106,13 @@ final class ProductSetupViewModel {
         // Check profile cap against current plan
         do {
             let existingProfiles = try await keywordRepo.fetchProfiles()
-            let gate = await GatingService.shared.canCreateProfile(existingCount: existingProfiles.count)
+            let gate = GatingService.shared.canCreateProfile(existingCount: existingProfiles.count)
             if !gate.isAllowed {
-                error = gate.blockedReason ?? "Profile limit reached."
+                if case .blocked(let reason) = gate {
+                    error = reason
+                } else {
+                    error = "Profile limit reached."
+                }
                 return
             }
         } catch {
@@ -269,7 +273,7 @@ final class ProductSetupViewModel {
                         .execute()
                 } catch {
                     for lead in leadsToSave {
-                        try? await SupabaseManager.shared.client
+                        _ = try? await SupabaseManager.shared.client
                             .from("leads")
                             .insert(lead)
                             .execute()

@@ -1,112 +1,117 @@
 import Foundation
 import Observation
 
-/// Gate check result — either allowed or blocked with a user-facing reason.
-enum GateResult {
-    case allowed
-    case blocked(reason: String)
-    
-    var isAllowed: Bool {
-        if case .allowed = self { return true }
-        return false
-    }
-    
-    var blockedReason: String? {
-        if case .blocked(let reason) = self { return reason }
-        return nil
-    }
-}
-
-/// Centralized enforcement of plan caps.
-/// All checks are local — no network calls. Plan defaults to `.free`
-/// and will be upgraded by `SubscriptionManager` once StoreKit is wired.
-@MainActor
+/// Lightweight local gating for plan-based limits.
+/// Defaults to `.free` until StoreKit delivers a real plan.
 @Observable
 final class GatingService {
-    
-    // MARK: - Singleton
-    
     static let shared = GatingService()
     
-    // MARK: - State
-    
-    /// Current plan — defaults to .free, updated by SubscriptionManager
-    var currentPlan: Plan = .free
-    
-    /// Derived entitlements for the current plan
-    var entitlements: Entitlements {
-        Entitlements.forPlan(currentPlan)
+    var currentPlan: Plan = .free {
+        didSet {
+            entitlements = Entitlements.forPlan(currentPlan)
+        }
     }
     
-    // MARK: - Daily Scan Tracking
+    var entitlements: Entitlements
     
-    private let scansKey = "daily_scan_count"
-    private let scanDateKey = "daily_scan_date"
+    private static let scansTodayKey = "gating_scansToday"
+    private static let scanResetDateKey = "gating_scanResetDate"
     
-    /// Number of scans performed today
+    private init() {
+        self.entitlements = Entitlements.forPlan(.free)
+    }
+    
+    // MARK: - Daily Scan Tracking (persisted)
+    
     var scansToday: Int {
-        resetIfNewDay()
-        return UserDefaults.standard.integer(forKey: scansKey)
+        get {
+            resetDailyScansIfNeeded()
+            return UserDefaults.standard.integer(forKey: Self.scansTodayKey)
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: Self.scansTodayKey)
+        }
     }
     
-    /// Record that a scan was performed
+    private var scanResetDate: Date {
+        get {
+            let stored = UserDefaults.standard.object(forKey: Self.scanResetDateKey) as? Date
+            return stored ?? Date()
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: Self.scanResetDateKey)
+        }
+    }
+    
     func recordScan() {
-        resetIfNewDay()
-        let current = UserDefaults.standard.integer(forKey: scansKey)
-        UserDefaults.standard.set(current + 1, forKey: scansKey)
+        resetDailyScansIfNeeded()
+        scansToday += 1
     }
     
-    // MARK: - Gate Checks
+    private func resetDailyScansIfNeeded() {
+        let stored = UserDefaults.standard.object(forKey: Self.scanResetDateKey) as? Date ?? Date()
+        if !Calendar.current.isDateInToday(stored) {
+            UserDefaults.standard.set(0, forKey: Self.scansTodayKey)
+            UserDefaults.standard.set(Date(), forKey: Self.scanResetDateKey)
+        }
+    }
     
-    /// Check if user can create a new profile
+    /// How many leads to show (no cap — all leads visible)
+    func visibleLeadCount() -> Int {
+        return Int.max
+    }
+    
+    // MARK: - Gating Checks
+    
+    enum GateResult {
+        case allowed
+        case blocked(reason: String)
+        
+        var isAllowed: Bool {
+            if case .allowed = self { return true }
+            return false
+        }
+    }
+    
+    /// Can the user create another profile?
     func canCreateProfile(existingCount: Int) -> GateResult {
         if existingCount >= entitlements.maxProfiles {
-            return .blocked(reason: "Free plan allows \(entitlements.maxProfiles) profile. Upgrade to create more.")
+            return .blocked(reason: "Your \(currentPlan.displayName) plan allows \(entitlements.maxProfiles) profile\(entitlements.maxProfiles == 1 ? "" : "s"). Upgrade to create more.")
         }
         return .allowed
     }
     
-    /// Check if user can add a keyword (total across all profiles)
-    func canAddKeyword(totalCount: Int) -> GateResult {
-        if totalCount >= entitlements.maxKeywordsTotal {
-            return .blocked(reason: "Free plan allows \(entitlements.maxKeywordsTotal) keywords. Upgrade to add more.")
+    /// Can the user add another keyword?
+    func canAddKeyword(existingCount: Int) -> GateResult {
+        if entitlements.maxKeywordsTotal == Entitlements.unlimited {
+            return .allowed
+        }
+        if existingCount >= entitlements.maxKeywordsTotal {
+            return .blocked(reason: "Your \(currentPlan.displayName) plan allows \(entitlements.maxKeywordsTotal) keywords. Upgrade to add more.")
         }
         return .allowed
     }
     
-    /// Check if user can perform a scan today
+    /// Can the user run another scan today? (called with explicit count)
+    func canScan(todaysScans: Int) -> GateResult {
+        if entitlements.maxScansPerDay == Entitlements.unlimited {
+            return .allowed
+        }
+        if todaysScans >= entitlements.maxScansPerDay {
+            return .blocked(reason: "You've used all \(entitlements.maxScansPerDay) scans for today. Upgrade for more.")
+        }
+        return .allowed
+    }
+    
+    /// Convenience — uses internal scan counter
     func canScan() -> GateResult {
-        resetIfNewDay()
-        let count = UserDefaults.standard.integer(forKey: scansKey)
-        if count >= entitlements.maxScansPerDay {
-            return .blocked(reason: "You've reached your daily scan limit (\(entitlements.maxScansPerDay)). Upgrade for more scans.")
-        }
-        return .allowed
+        resetDailyScansIfNeeded()
+        return canScan(todaysScans: scansToday)
     }
     
-    /// Maximum number of leads visible for the current plan
-    func visibleLeadCount() -> Int {
-        entitlements.maxVisibleLeads
-    }
-    
-    /// Check if CSV export is available
+    /// Can the user export to CSV?
     func canExportCSV() -> GateResult {
-        entitlements.canExportCSV ? .allowed : .blocked(reason: "CSV export requires a Starter or Pro plan.")
-    }
-    
-    // MARK: - Private
-    
-    private init() {}
-    
-    /// Reset scan count if the stored date is not today
-    private func resetIfNewDay() {
-        let today = Calendar.current.startOfDay(for: Date())
-        let storedDate = UserDefaults.standard.object(forKey: scanDateKey) as? Date ?? .distantPast
-        let storedDay = Calendar.current.startOfDay(for: storedDate)
-        
-        if today != storedDay {
-            UserDefaults.standard.set(0, forKey: scansKey)
-            UserDefaults.standard.set(today, forKey: scanDateKey)
-        }
+        entitlements.canExportCSV ? .allowed : .blocked(reason: "CSV export is available on Starter and Pro plans.")
     }
 }

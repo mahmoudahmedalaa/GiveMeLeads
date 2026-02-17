@@ -1,9 +1,10 @@
 import SwiftUI
 
-/// Design system colors from FRONTEND_GUIDELINES.md
+/// Design system colors from FRONTEND_GUIDELINES.md — adaptive for light/dark mode
 enum AppColors {
     
     // MARK: - Primary Colors (Electric Purple)
+    // Brand colors stay the same in both modes
     static let primary50  = Color(hex: "#F5F3FF")
     static let primary100 = Color(hex: "#EDE9FE")
     static let primary200 = Color(hex: "#DDD6FE")
@@ -15,13 +16,13 @@ enum AppColors {
     static let primary800 = Color(hex: "#5B21B6")
     static let primary900 = Color(hex: "#4C1D95")
     
-    // MARK: - Background Colors (Deep Space)
-    static let bg900  = Color(hex: "#06060B")
-    static let bg800  = Color(hex: "#0A0A12") // Screen background ★
-    static let bg700  = Color(hex: "#111119") // Card background
-    static let bg600  = Color(hex: "#1A1A24") // Elevated card / sheet
-    static let bg500  = Color(hex: "#252530") // Input background
-    static let bgGlass = Color.white.opacity(0.06)
+    // MARK: - Background Colors — adaptive
+    static let bg900  = Color(light: "#F8F8FC", dark: "#06060B")
+    static let bg800  = Color(light: "#F0F0F7", dark: "#0A0A12")  // Screen background ★
+    static let bg700  = Color(light: "#FFFFFF", dark: "#111119")  // Card background
+    static let bg600  = Color(light: "#F5F5FA", dark: "#1A1A24")  // Elevated card / sheet
+    static let bg500  = Color(light: "#EAEAF0", dark: "#252530")  // Input background
+    static let bgGlass = Color(light: .black.opacity(0.04), dark: .white.opacity(0.06))
     
     /// Primary screen background
     static let background = bg800
@@ -49,11 +50,11 @@ enum AppColors {
     static let error   = Color(hex: "#EF4444")
     static let info    = Color(hex: "#3B82F6")
     
-    // MARK: - Text Colors
-    static let textPrimary   = Color.white.opacity(0.92)
-    static let textSecondary = Color.white.opacity(0.64)
-    static let textTertiary  = Color.white.opacity(0.40)
-    static let textInverse   = Color(hex: "#06060B")
+    // MARK: - Text Colors — adaptive
+    static let textPrimary   = Color(light: .black.opacity(0.88), dark: .white.opacity(0.92))
+    static let textSecondary = Color(light: .black.opacity(0.56), dark: .white.opacity(0.64))
+    static let textTertiary  = Color(light: .black.opacity(0.36), dark: .white.opacity(0.40))
+    static let textInverse   = Color(light: .white, dark: Color(hex: "#06060B"))
     
     // MARK: - Gradients
     static let primaryGradient = LinearGradient(
@@ -69,7 +70,7 @@ enum AppColors {
     )
     
     static let backgroundGradient = LinearGradient(
-        colors: [Color(hex: "#0A0A12"), Color(hex: "#0D0D1A")],
+        colors: [bg800, bg900],
         startPoint: .top,
         endPoint: .bottom
     )
@@ -105,5 +106,19 @@ extension Color {
             blue: Double(b) / 255,
             opacity: Double(a) / 255
         )
+    }
+    
+    /// Create an adaptive color that changes based on light/dark mode
+    init(light: Color, dark: Color) {
+        self.init(uiColor: UIColor { traitCollection in
+            traitCollection.userInterfaceStyle == .dark
+                ? UIColor(dark)
+                : UIColor(light)
+        })
+    }
+    
+    /// Convenience: adaptive color from hex strings
+    init(light lightHex: String, dark darkHex: String) {
+        self.init(light: Color(hex: lightHex), dark: Color(hex: darkHex))
     }
 }

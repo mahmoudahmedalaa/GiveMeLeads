@@ -5,6 +5,7 @@ struct KeywordListScreen: View {
     @State private var viewModel = KeywordViewModel()
     @State private var profileToDelete: UUID?
     @State private var showDeleteConfirm = false
+    @State private var profileToEdit: TrackingProfile?
     
     var body: some View {
         NavigationStack {
@@ -25,13 +26,15 @@ struct KeywordListScreen: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    if viewModel.canAddProfile {
-                        Button(action: {
+                    Button(action: {
+                        if viewModel.canAddProfile {
                             router.showProductSetup = true
-                        }) {
-                            Image(systemName: "plus")
-                                .foregroundColor(AppColors.primary400)
+                        } else {
+                            router.showPaywall = true
                         }
+                    }) {
+                        Image(systemName: "plus")
+                            .foregroundColor(AppColors.primary400)
                     }
                 }
             }
@@ -55,6 +58,15 @@ struct KeywordListScreen: View {
                 }
             } message: {
                 Text("This will permanently delete this profile and its keywords. Leads already found won't be affected.")
+            }
+            .sheet(item: $profileToEdit) { profile in
+                ProfileEditSheet(
+                    profile: profile,
+                    viewModel: viewModel,
+                    onSaved: {
+                        profileToEdit = nil
+                    }
+                )
             }
         }
     }
@@ -95,31 +107,33 @@ struct KeywordListScreen: View {
                     profileCard(profile)
                 }
                 
-                // Add another profile button
-                if viewModel.canAddProfile {
-                    Button(action: {
+                // Add another profile button — always shown, shows paywall if gated
+                Button(action: {
+                    if viewModel.canAddProfile {
                         router.showProductSetup = true
-                    }) {
-                        HStack {
-                            Image(systemName: "plus.circle.fill")
-                                .foregroundStyle(AppColors.primaryGradient)
-                            Text("Add Another Product")
-                                .font(AppTypography.bodyMedium)
-                                .foregroundColor(AppColors.primary400)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(AppSpacing.spacing4)
-                        .background(AppColors.primary500.opacity(0.08))
-                        .clipShape(RoundedRectangle(cornerRadius: AppRadius.md))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: AppRadius.md)
-                                .strokeBorder(AppColors.primary500.opacity(0.2), style: StrokeStyle(lineWidth: 1, dash: [6]))
-                        )
+                    } else {
+                        router.showPaywall = true
                     }
+                }) {
+                    HStack {
+                        Image(systemName: viewModel.canAddProfile ? "plus.circle.fill" : "lock.fill")
+                            .foregroundStyle(viewModel.canAddProfile ? AnyShapeStyle(AppColors.primaryGradient) : AnyShapeStyle(AppColors.textTertiary))
+                        Text(viewModel.canAddProfile ? "Add Another Product" : "Upgrade to Add More")
+                            .font(AppTypography.bodyMedium)
+                            .foregroundColor(viewModel.canAddProfile ? AppColors.primary400 : AppColors.textTertiary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(AppSpacing.spacing4)
+                    .background(AppColors.primary500.opacity(0.08))
+                    .clipShape(RoundedRectangle(cornerRadius: AppRadius.md))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AppRadius.md)
+                            .strokeBorder(AppColors.primary500.opacity(0.2), style: StrokeStyle(lineWidth: 1, dash: [6]))
+                    )
                 }
                 
                 // Counter
-                Text("\(viewModel.profiles.count)/\(AppConfig.maxProfiles) profiles")
+                Text("\(viewModel.profiles.count)/\(GatingService.shared.entitlements.maxProfiles) profiles")
                     .font(AppTypography.bodySmall)
                     .foregroundColor(AppColors.textTertiary)
                     .padding(.top, AppSpacing.spacing2)
@@ -162,6 +176,16 @@ struct KeywordListScreen: View {
                 }
                 
                 Spacer()
+                
+                // Edit button
+                Button(action: {
+                    profileToEdit = profile
+                }) {
+                    Image(systemName: "pencil")
+                        .foregroundColor(AppColors.primary400.opacity(0.7))
+                        .font(.system(size: 14))
+                        .padding(8)
+                }
                 
                 // Delete button — requires confirmation
                 Button(action: {
