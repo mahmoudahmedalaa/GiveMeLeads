@@ -47,3 +47,4 @@ Secrets.xcconfig
 *.log
 *.tmp
 .env
+gsd-skill/
