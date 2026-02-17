@@ -69,7 +69,14 @@ final class RedditSearchService: RedditSearchServiceProtocol {
             
             do {
                 let (data, response) = try await URLSession.shared.data(for: request)
-                guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else { continue }
+                guard let httpResponse = response as? HTTPURLResponse else { continue }
+                
+                // Rate limit detection — propagate to UI
+                if httpResponse.statusCode == 429 {
+                    throw RedditRateLimitError.rateLimited
+                }
+                guard httpResponse.statusCode == 200 else { continue }
+                
                 let listing = try JSONDecoder().decode(RedditListing.self, from: data)
                 
                 for child in listing.data.children {
@@ -79,7 +86,9 @@ final class RedditSearchService: RedditSearchServiceProtocol {
                         allPosts.append(post)
                     }
                 }
-                try await Task.sleep(nanoseconds: 800_000_000)
+                try await Task.sleep(nanoseconds: 1_000_000_000)
+            } catch let e as RedditRateLimitError {
+                throw e
             } catch { continue }
         }
         
@@ -96,7 +105,9 @@ final class RedditSearchService: RedditSearchServiceProtocol {
                 
                 do {
                     let (data, response) = try await URLSession.shared.data(for: request)
-                    guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else { continue }
+                    guard let httpResponse = response as? HTTPURLResponse else { continue }
+                    if httpResponse.statusCode == 429 { throw RedditRateLimitError.rateLimited }
+                    guard httpResponse.statusCode == 200 else { continue }
                     let listing = try JSONDecoder().decode(RedditListing.self, from: data)
                     
                     for child in listing.data.children {
@@ -106,7 +117,9 @@ final class RedditSearchService: RedditSearchServiceProtocol {
                             allPosts.append(post)
                         }
                     }
-                    try await Task.sleep(nanoseconds: 800_000_000)
+                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                } catch let e as RedditRateLimitError {
+                    throw e
                 } catch { continue }
             }
         }
@@ -133,7 +146,9 @@ final class RedditSearchService: RedditSearchServiceProtocol {
             
             do {
                 let (data, response) = try await URLSession.shared.data(for: request)
-                guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else { continue }
+                guard let httpResponse = response as? HTTPURLResponse else { continue }
+                if httpResponse.statusCode == 429 { throw RedditRateLimitError.rateLimited }
+                guard httpResponse.statusCode == 200 else { continue }
                 let listing = try JSONDecoder().decode(CommentListing.self, from: data)
                 
                 for child in listing.data.children {
@@ -143,7 +158,9 @@ final class RedditSearchService: RedditSearchServiceProtocol {
                         allComments.append(comment)
                     }
                 }
-                try await Task.sleep(nanoseconds: 800_000_000)
+                try await Task.sleep(nanoseconds: 1_000_000_000)
+            } catch let e as RedditRateLimitError {
+                throw e
             } catch { continue }
         }
         return allComments
@@ -680,4 +697,13 @@ private struct CommentListingData: Codable {
 
 private struct CommentWrapper: Codable {
     let data: RedditSearchService.RedditComment
+}
+
+/// Reddit API rate limit error — propagated to UI for user-friendly messaging
+enum RedditRateLimitError: LocalizedError {
+    case rateLimited
+    
+    var errorDescription: String? {
+        "Reddit is rate-limiting requests. Please wait a minute before scanning again."
+    }
 }

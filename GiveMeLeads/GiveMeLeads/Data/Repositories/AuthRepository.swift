@@ -110,6 +110,9 @@ enum AppError: LocalizedError, Equatable {
         if let appError = error as? AppError {
             return appError
         }
+        if error is RedditRateLimitError {
+            return .rateLimited
+        }
         if let urlError = error as? URLError {
             switch urlError.code {
             case .notConnectedToInternet, .networkConnectionLost:

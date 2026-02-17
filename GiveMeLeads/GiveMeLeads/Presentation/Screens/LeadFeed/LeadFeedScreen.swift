@@ -7,6 +7,8 @@ struct LeadFeedScreen: View {
     @State private var showClearConfirm = false
     @State private var showReplySheet = false
     @State private var replyLead: Lead?
+    @State private var replyComments: [RedditSearchService.PostComment] = []
+    private let redditSearch = RedditSearchService()
     
     var body: some View {
         NavigationStack {
@@ -142,7 +144,7 @@ struct LeadFeedScreen: View {
             }
             .sheet(isPresented: $showReplySheet) {
                 if let lead = replyLead {
-                    ReplySheetView(lead: lead)
+                    ReplySheetView(lead: lead, topComments: replyComments)
                         .presentationDetents([.medium, .large])
                 }
             }
@@ -477,7 +479,18 @@ struct LeadFeedScreen: View {
                                     case .contacted: await viewModel.markContacted(lead)
                                     case .reply:
                                         replyLead = lead
+                                        replyComments = []
                                         showReplySheet = true
+                                        // Load comments in background
+                                        Task {
+                                            if lead.redditPostId.hasPrefix("t3_") {
+                                                replyComments = (try? await redditSearch.fetchTopComments(
+                                                    postId: lead.redditPostId,
+                                                    subreddit: lead.subreddit,
+                                                    limit: 5
+                                                )) ?? []
+                                            }
+                                        }
                                     }
                                 }
                             },
